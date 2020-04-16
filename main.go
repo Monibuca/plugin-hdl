@@ -1,4 +1,4 @@
-package hdlplugin
+package hdl
 
 import (
 	"log"
@@ -7,22 +7,22 @@ import (
 
 	. "github.com/Monibuca/engine"
 	"github.com/Monibuca/engine/avformat"
+	. "github.com/logrusorgru/aurora"
 )
 
 var config = new(ListenerConfig)
 
 func init() {
 	InstallPlugin(&PluginConfig{
-		Name:    "HDL",
-		Type:    PLUGIN_SUBSCRIBER,
-		Config:  config,
-		Version: "1.0.0",
-		Run:     run,
+		Name:   "HDL",
+		Type:   PLUGIN_SUBSCRIBER,
+		Config: config,
+		Run:    run,
 	})
 }
 
 func run() {
-	log.Printf("HDL start at %s", config.ListenAddr)
+	Print(Green("HDL start at "), BrightBlue(config.ListenAddr))
 	log.Fatal(http.ListenAndServe(config.ListenAddr, http.HandlerFunc(HDLHandler)))
 }
 

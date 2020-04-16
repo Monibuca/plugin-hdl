@@ -9,6 +9,7 @@ HDL
 
 ## 配置
 ```toml
+[HDL]
 ListenAddr = "2020"
 ```
 
