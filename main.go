@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	. "github.com/Monibuca/engine"
-	"github.com/Monibuca/engine/avformat"
+	. "github.com/Monibuca/engine/v2"
+	"github.com/Monibuca/engine/v2/avformat"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -36,21 +36,21 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(stringPath, ".flv") {
 		stringPath = strings.TrimRight(stringPath, ".flv")
 	}
-	if _, ok := AllRoom.Load(stringPath); ok {
+	if s := FindStream(stringPath); s != nil {
 		//atomic.AddInt32(&hdlId, 1)
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("Content-Type", "video/x-flv")
 		w.Write(avformat.FLVHeader)
-		p := OutputStream{
+		p := Subscriber{
 			Sign: sign,
-			SendHandler: func(packet *avformat.SendPacket) error {
+			OnData: func(packet *avformat.SendPacket) error {
 				return avformat.WriteFLVTag(w, packet)
 			},
 			SubscriberInfo: SubscriberInfo{
 				ID: r.RemoteAddr, Type: "FLV",
 			},
 		}
-		p.Play(stringPath)
+		p.Subscribe(stringPath)
 	} else {
 		w.WriteHeader(404)
 	}
