@@ -38,6 +38,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if s := FindStream(stringPath); s != nil {
 		//atomic.AddInt32(&hdlId, 1)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("Content-Type", "video/x-flv")
 		w.Write(avformat.FLVHeader)
