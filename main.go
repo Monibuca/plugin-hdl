@@ -53,7 +53,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 		WriteEcmaArray(&buffer, amf.Object{
 			"MetaDataCreator": "monibuca",
 			"hasVideo":        true,
-			"hasAudio":        true,
+			"hasAudio":        s.AudioInfo.SoundFormat>0,
 			"hasMatadata":     true,
 			"canSeekToEnd":    false,
 			"duration":        0,
