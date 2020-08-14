@@ -39,51 +39,54 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(stringPath, ".flv") {
 		stringPath = strings.TrimRight(stringPath, ".flv")
 	}
-	if s := FindStream(stringPath); s != nil {
-		//atomic.AddInt32(&hdlId, 1)
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Transfer-Encoding", "chunked")
-		w.Header().Set("Content-Type", "video/x-flv")
-		w.Write(avformat.FLVHeader)
-		var metadata avformat.SendPacket
-		metadata.AVPacket = new(avformat.AVPacket)
-		metadata.Type = avformat.FLV_TAG_TYPE_SCRIPT
-		var buffer bytes.Buffer
-		amf.WriteString(&buffer, "onMetaData")
-		WriteEcmaArray(&buffer, amf.Object{
-			"MetaDataCreator": "monibuca",
-			"hasVideo":        true,
-			"hasAudio":        true,
-			"hasMatadata":     true,
-			"canSeekToEnd":    false,
-			"duration":        0,
-			"hasKeyFrames":    0,
-			"videocodecid":    int(s.VideoInfo.CodecID),
-			"framerate":       0,
-			"videodatarate":   0,
-			"audiocodecid":    int(s.AudioInfo.SoundFormat),
-			"filesize":        0,
-			"width":           s.VideoInfo.SPSInfo.Width,
-			"height":          s.VideoInfo.SPSInfo.Height,
-			"audiosamplerate": s.AudioInfo.SoundRate,
-			"audiosamplesize": int(s.AudioInfo.SoundSize),
-			"stereo":          s.AudioInfo.SoundType == 1,
-		})
-		metadata.Payload = buffer.Bytes()
-		avformat.WriteFLVTag(w, &metadata)
-		p := Subscriber{
-			Sign: sign,
-			OnData: func(packet *avformat.SendPacket) error {
-				return avformat.WriteFLVTag(w, packet)
-			},
-			SubscriberInfo: SubscriberInfo{
-				ID: r.RemoteAddr, Type: "FLV",
-			},
-		}
-		p.Subscribe(stringPath)
-	} else {
-		w.WriteHeader(404)
+	//atomic.AddInt32(&hdlId, 1)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Content-Type", "video/x-flv")
+	w.Write(avformat.FLVHeader)
+	p := Subscriber{
+		Sign: sign,
+		OnData: func(packet *avformat.SendPacket) error {
+			return avformat.WriteFLVTag(w, packet)
+		},
+		MetaData: func(stream *Stream) error {
+			var metadata avformat.SendPacket
+			metadata.AVPacket = new(avformat.AVPacket)
+			metadata.Type = avformat.FLV_TAG_TYPE_SCRIPT
+			var buffer bytes.Buffer
+			if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
+				return err
+			}
+
+			if _, err := WriteEcmaArray(&buffer, amf.Object{
+				"MetaDataCreator": "monibuca",
+				"hasVideo":        true,
+				"hasAudio":        stream.AudioInfo.SoundFormat > 0,
+				"hasMatadata":     true,
+				"canSeekToEnd":    false,
+				"duration":        0,
+				"hasKeyFrames":    0,
+				"videocodecid":    int(stream.VideoInfo.CodecID),
+				"framerate":       0,
+				"videodatarate":   0,
+				"audiocodecid":    int(stream.AudioInfo.SoundFormat),
+				"filesize":        0,
+				"width":           stream.VideoInfo.SPSInfo.Width,
+				"height":          stream.VideoInfo.SPSInfo.Height,
+				"audiosamplerate": stream.AudioInfo.SoundRate,
+				"audiosamplesize": int(stream.AudioInfo.SoundSize),
+				"stereo":          stream.AudioInfo.SoundType == 1,
+			}); err != nil {
+				return err
+			}
+			metadata.Payload = buffer.Bytes()
+			return avformat.WriteFLVTag(w, &metadata)
+		},
+		SubscriberInfo: SubscriberInfo{
+			ID: r.RemoteAddr, Type: "FLV",
+		},
 	}
+	p.Subscribe(stringPath)
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {
 	n, err = amf.WriteMarker(w, amf.AMF0_ECMA_ARRAY_MARKER)
