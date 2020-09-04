@@ -10,7 +10,7 @@ import (
 	. "github.com/Monibuca/engine/v2"
 	"github.com/Monibuca/engine/v2/avformat"
 	. "github.com/logrusorgru/aurora"
-	"github.com/zhangpeihao/goamf"
+	amf "github.com/zhangpeihao/goamf"
 )
 
 var config = new(ListenerConfig)
@@ -60,8 +60,8 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 
 			if _, err := WriteEcmaArray(&buffer, amf.Object{
 				"MetaDataCreator": "monibuca",
-				"hasVideo":        true,
-				"hasAudio":        stream.AudioInfo.SoundFormat > 0,
+				"hasVideo":        stream.HasVideo,
+				"hasAudio":        stream.HasAudio,
 				"hasMatadata":     true,
 				"canSeekToEnd":    false,
 				"duration":        0,
