@@ -3,30 +3,41 @@ package hdl
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"net/http"
-	"strings"
+	"regexp"
 
 	. "github.com/Monibuca/engine/v2"
 	"github.com/Monibuca/engine/v2/avformat"
+	"github.com/Monibuca/utils"
 	. "github.com/logrusorgru/aurora"
-	"github.com/zhangpeihao/goamf"
+	amf "github.com/zhangpeihao/goamf"
 )
 
-var config = new(ListenerConfig)
+var config struct {
+	ListenAddr    string
+	ListenAddrTLS string
+	CertFile      string
+	KeyFile       string
+}
+var streamPathReg = regexp.MustCompile("/(hdl/)?((.+)(\\.flv)|(.+))")
 
 func init() {
 	InstallPlugin(&PluginConfig{
 		Name:   "HDL",
 		Type:   PLUGIN_SUBSCRIBER,
-		Config: config,
+		Config: &config,
 		Run:    run,
 	})
 }
 
 func run() {
-	Print(Green("HDL start at "), BrightBlue(config.ListenAddr))
-	log.Fatal(http.ListenAndServe(config.ListenAddr, http.HandlerFunc(HDLHandler)))
+	if config.ListenAddr != "" || config.ListenAddrTLS != "" {
+		Print(Green("HDL start at "), BrightBlue(config.ListenAddr), BrightBlue(config.ListenAddrTLS))
+		utils.ListenAddrs(config.ListenAddr, config.ListenAddrTLS, config.CertFile, config.KeyFile, http.HandlerFunc(HDLHandler))
+	} else {
+		Print(Green("HDL start reuse gateway port"))
+		http.HandleFunc("/hdl/", HDLHandler)
+	}
 }
 
 func HDLHandler(w http.ResponseWriter, r *http.Request) {
@@ -35,9 +46,10 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(403)
 		return
 	}
-	stringPath := strings.TrimLeft(r.RequestURI, "/")
-	if strings.HasSuffix(stringPath, ".flv") {
-		stringPath = strings.TrimRight(stringPath, ".flv")
+	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
+	stringPath := parts[3]
+	if stringPath == "" {
+		stringPath = parts[5]
 	}
 	//atomic.AddInt32(&hdlId, 1)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
