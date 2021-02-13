@@ -98,7 +98,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			ID: r.RemoteAddr, Type: "FLV",
 		},
 	}
-	p.Subscribe(stringPath)
+	p.SubscribeWithContext(stringPath, r.Context())
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {
 	n, err = amf.WriteMarker(w, amf.AMF0_ECMA_ARRAY_MARKER)
