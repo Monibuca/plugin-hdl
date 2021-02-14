@@ -62,7 +62,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	if err := sub.Subscribe(stringPath); err == nil {
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
-			return err
+			return
 		}
 		metaData := amf.Object{
 			"MetaDataCreator": "m7s",
@@ -77,9 +77,10 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			"filesize":        0,
 		}
 		if sub.OriginVideoTrack != nil {
-			metaData["videocodecid"] = sub.OriginVideoTrack.CodecID
+			metaData["videocodecid"] = int(sub.OriginVideoTrack.CodecID)
 			metaData["width"] = sub.OriginVideoTrack.SPSInfo.Width
 			metaData["height"] = sub.OriginVideoTrack.SPSInfo.Height
+			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, sub.OriginVideoTrack.RtmpTag)
 			sub.OnVideo = func(pack VideoPack) {
 				payload := codec.Nalu2RTMPTag(pack.Payload)
 				defer utils.RecycleSlice(payload)
@@ -94,6 +95,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			var aac byte
 			if sub.OriginAudioTrack.SoundFormat == 10 {
 				aac = sub.OriginAudioTrack.RtmpTag[0]
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, sub.OriginAudioTrack.RtmpTag)
 			}
 			sub.OnAudio = func(pack AudioPack) {
 				payload := codec.Audio2RTMPTag(aac, pack.Payload)
@@ -102,7 +104,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
-			return err
+			return
 		}
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, buffer.Bytes())
 		sub.Play(r.Context(), sub.OriginAudioTrack, sub.OriginVideoTrack)
