@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"regexp"
 
-	. "github.com/Monibuca/engine/v2"
-	"github.com/Monibuca/engine/v2/avformat"
-	"github.com/Monibuca/utils"
+	. "github.com/Monibuca/engine/v3"
+	"github.com/Monibuca/utils/v3"
+	"github.com/Monibuca/utils/v3/codec"
 	. "github.com/logrusorgru/aurora"
 	amf "github.com/zhangpeihao/goamf"
 )
@@ -24,7 +24,6 @@ var streamPathReg = regexp.MustCompile("/(hdl/)?((.+)(\\.flv)|(.+))")
 func init() {
 	InstallPlugin(&PluginConfig{
 		Name:   "HDL",
-		Type:   PLUGIN_SUBSCRIBER,
 		Config: &config,
 		Run:    run,
 	})
@@ -32,73 +31,82 @@ func init() {
 
 func run() {
 	if config.ListenAddr != "" || config.ListenAddrTLS != "" {
-		Print(Green("HDL start at "), BrightBlue(config.ListenAddr), BrightBlue(config.ListenAddrTLS))
+		utils.Print(Green("HDL start at "), BrightBlue(config.ListenAddr), BrightBlue(config.ListenAddrTLS))
 		utils.ListenAddrs(config.ListenAddr, config.ListenAddrTLS, config.CertFile, config.KeyFile, http.HandlerFunc(HDLHandler))
 	} else {
-		Print(Green("HDL start reuse gateway port"))
+		utils.Print(Green("HDL start reuse gateway port"))
 		http.HandleFunc("/hdl/", HDLHandler)
 	}
 }
 
 func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	sign := r.URL.Query().Get("sign")
-	if err := AuthHooks.Trigger(sign); err != nil {
-		w.WriteHeader(403)
+	// if err := AuthHooks.Trigger(sign); err != nil {
+	// 	w.WriteHeader(403)
+	// 	return
+	// }
+	utils.CORS(w, r)
+	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
+	if len(parts) == 0 {
+		w.WriteHeader(404)
 		return
 	}
-	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
 	stringPath := parts[3]
 	if stringPath == "" {
 		stringPath = parts[5]
 	}
-	//atomic.AddInt32(&hdlId, 1)
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
-	w.Write(avformat.FLVHeader)
-	p := Subscriber{
-		Sign: sign,
-		OnData: func(packet *avformat.SendPacket) error {
-			return avformat.WriteFLVTag(w, packet)
-		},
-		MetaData: func(stream *Stream) error {
-			var metadata avformat.SendPacket
-			metadata.AVPacket = new(avformat.AVPacket)
-			metadata.Type = avformat.FLV_TAG_TYPE_SCRIPT
-			var buffer bytes.Buffer
-			if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
-				return err
+	w.Write(codec.FLVHeader)
+	sub := Subscriber{Sign: sign, ID: r.RemoteAddr, Type: "FLV"}
+	if err := sub.Subscribe(stringPath); err == nil {
+		var buffer bytes.Buffer
+		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
+			return err
+		}
+		metaData := amf.Object{
+			"MetaDataCreator": "m7s",
+			"hasVideo":        sub.OriginVideoTrack != nil,
+			"hasAudio":        sub.OriginAudioTrack != nil,
+			"hasMatadata":     true,
+			"canSeekToEnd":    false,
+			"duration":        0,
+			"hasKeyFrames":    0,
+			"framerate":       0,
+			"videodatarate":   0,
+			"filesize":        0,
+		}
+		if sub.OriginVideoTrack != nil {
+			metaData["videocodecid"] = sub.OriginVideoTrack.CodecID
+			metaData["width"] = sub.OriginVideoTrack.SPSInfo.Width
+			metaData["height"] = sub.OriginVideoTrack.SPSInfo.Height
+			sub.OnVideo = func(pack VideoPack) {
+				payload := codec.Nalu2RTMPTag(pack.Payload)
+				defer utils.RecycleSlice(payload)
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, pack.Timestamp, payload)
 			}
-
-			if _, err := WriteEcmaArray(&buffer, amf.Object{
-				"MetaDataCreator": "monibuca",
-				"hasVideo":        true,
-				"hasAudio":        stream.AudioInfo.SoundFormat > 0,
-				"hasMatadata":     true,
-				"canSeekToEnd":    false,
-				"duration":        0,
-				"hasKeyFrames":    0,
-				"videocodecid":    int(stream.VideoInfo.CodecID),
-				"framerate":       0,
-				"videodatarate":   0,
-				"audiocodecid":    int(stream.AudioInfo.SoundFormat),
-				"filesize":        0,
-				"width":           stream.VideoInfo.SPSInfo.Width,
-				"height":          stream.VideoInfo.SPSInfo.Height,
-				"audiosamplerate": stream.AudioInfo.SoundRate,
-				"audiosamplesize": int(stream.AudioInfo.SoundSize),
-				"stereo":          stream.AudioInfo.SoundType == 1,
-			}); err != nil {
-				return err
+		}
+		if sub.OriginAudioTrack != nil {
+			metaData["audiocodecid"] = int(sub.OriginAudioTrack.SoundFormat)
+			metaData["audiosamplerate"] = sub.OriginAudioTrack.SoundRate
+			metaData["audiosamplesize"] = int(sub.OriginAudioTrack.SoundSize)
+			metaData["stereo"] = sub.OriginAudioTrack.SoundType == 1
+			var aac byte
+			if sub.OriginAudioTrack.SoundFormat == 10 {
+				aac = sub.OriginAudioTrack.RtmpTag[0]
 			}
-			metadata.Payload = buffer.Bytes()
-			return avformat.WriteFLVTag(w, &metadata)
-		},
-		SubscriberInfo: SubscriberInfo{
-			ID: r.RemoteAddr, Type: "FLV",
-		},
+			sub.OnAudio = func(pack AudioPack) {
+				payload := codec.Audio2RTMPTag(aac, pack.Payload)
+				defer utils.RecycleSlice(payload)
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, pack.Timestamp, payload)
+			}
+		}
+		if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
+			return err
+		}
+		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, buffer.Bytes())
+		sub.Play(r.Context(), sub.OriginAudioTrack, sub.OriginVideoTrack)
 	}
-	p.Subscribe(stringPath)
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {
 	n, err = amf.WriteMarker(w, amf.AMF0_ECMA_ARRAY_MARKER)
