@@ -58,7 +58,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	w.Write(codec.FLVHeader)
-	sub := Subscriber{Sign: sign, ID: r.RemoteAddr, Type: "FLV"}
+	sub := Subscriber{Sign: sign, ID: r.RemoteAddr, Type: "FLV", Ctx2: r.Context()}
 	if err := sub.Subscribe(stringPath); err == nil {
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
@@ -107,7 +107,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, buffer.Bytes())
-		sub.Play(r.Context(), sub.OriginAudioTrack, sub.OriginVideoTrack)
+		sub.Play(sub.OriginAudioTrack, sub.OriginVideoTrack)
 	}
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {
