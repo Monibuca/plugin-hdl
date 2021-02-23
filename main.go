@@ -82,7 +82,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			metaData["height"] = sub.OriginVideoTrack.SPSInfo.Height
 			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, sub.OriginVideoTrack.RtmpTag)
 			sub.OnVideo = func(pack VideoPack) {
-				payload := codec.Nalu2RTMPTag(pack.Payload)
+				payload := pack.ToRTMPTag()
 				defer utils.RecycleSlice(payload)
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, pack.Timestamp, payload)
 			}
@@ -98,7 +98,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, sub.OriginAudioTrack.RtmpTag)
 			}
 			sub.OnAudio = func(pack AudioPack) {
-				payload := codec.Audio2RTMPTag(aac, pack.Payload)
+				payload := pack.ToRTMPTag(aac)
 				defer utils.RecycleSlice(payload)
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, pack.Timestamp, payload)
 			}
