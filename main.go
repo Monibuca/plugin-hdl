@@ -91,14 +91,13 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			metaData["audiocodecid"] = int(sub.OriginAudioTrack.SoundFormat)
 			metaData["audiosamplerate"] = sub.OriginAudioTrack.SoundRate
 			metaData["audiosamplesize"] = int(sub.OriginAudioTrack.SoundSize)
-			metaData["stereo"] = sub.OriginAudioTrack.SoundType == 1
-			var aac byte
+			metaData["stereo"] = sub.OriginAudioTrack.Channels == 2
 			if sub.OriginAudioTrack.SoundFormat == 10 {
-				aac = sub.OriginAudioTrack.RtmpTag[0]
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, sub.OriginAudioTrack.RtmpTag)
 			}
+			tag0 := sub.OriginAudioTrack.RtmpTag[0]
 			sub.OnAudio = func(pack AudioPack) {
-				payload := pack.ToRTMPTag(aac)
+				payload := pack.ToRTMPTag(tag0)
 				defer utils.RecycleSlice(payload)
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, pack.Timestamp, payload)
 			}

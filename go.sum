@@ -4,6 +4,8 @@ github.com/Monibuca/engine/v3 v3.0.0-alpha4 h1:kAStDd1p9tlSQeNyAAmb7vrPL2UCz7LFT
 github.com/Monibuca/engine/v3 v3.0.0-alpha4/go.mod h1:V0/kfen6K5O/RLXHPsZj4DF/LboDZ0OqfeCfn35bWMo=
 github.com/Monibuca/engine/v3 v3.0.0-alpha6 h1:USZa+JDVJd13rb9wmX06ZxjRCrqYTAPe5wVD+0IODEE=
 github.com/Monibuca/engine/v3 v3.0.0-alpha6/go.mod h1:V0/kfen6K5O/RLXHPsZj4DF/LboDZ0OqfeCfn35bWMo=
+github.com/Monibuca/engine/v3 v3.0.0-alpha7 h1:ohlsdFQCUS8i6eux+etFxLKo/IyQUgqlsNAgTIR9mDQ=
+github.com/Monibuca/engine/v3 v3.0.0-alpha7/go.mod h1:eonu3UFn3W7NpHzSrACipxdAyOBCUwzlFUe1R7JjttE=
 github.com/Monibuca/utils/v3 v3.0.0-alpha4 h1:pecYA89kWmtGOeY6R99d4T1epPJ1wc+jFrrJY13VD04=
 github.com/Monibuca/utils/v3 v3.0.0-alpha4/go.mod h1:3xYmhQbgAZBHLyIMteUCd1va+1z/xnd72B585mCaT3c=
 github.com/Monibuca/utils/v3 v3.0.0-alpha5 h1:IOyW/KJSRdRg+TPcgwkHLBynqfNQOV6p3iP7LgXEMFc=
@@ -35,3 +37,5 @@ golang.org/x/sys v0.0.0-20210108172913-0df2131ae363 h1:wHn06sgWHMO1VsQ8F+KzDJx/J
 golang.org/x/sys v0.0.0-20210108172913-0df2131ae363/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210220050731-9a76102bfb43 h1:SgQ6LNaYJU0JIuEHv9+s6EbhSCwYeAf5Yvj6lpYlqAE=
 golang.org/x/sys v0.0.0-20210220050731-9a76102bfb43/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20210305230114-8fe3ee5dd75b h1:ggRgirZABFolTmi3sn6Ivd9SipZwLedQ5wR0aAKnFxU=
+golang.org/x/sys v0.0.0-20210305230114-8fe3ee5dd75b/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
