@@ -40,7 +40,6 @@ func run() {
 }
 
 func HDLHandler(w http.ResponseWriter, r *http.Request) {
-	sign := r.URL.Query().Get("sign")
 	// if err := AuthHooks.Trigger(sign); err != nil {
 	// 	w.WriteHeader(403)
 	// 	return
@@ -58,16 +57,17 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	w.Write(codec.FLVHeader)
-	sub := Subscriber{Sign: sign, ID: r.RemoteAddr, Type: "FLV", Ctx2: r.Context()}
+	sub := Subscriber{ByteStreamFormat: true, ID: r.RemoteAddr, Type: "FLV", Ctx2: r.Context()}
 	if err := sub.Subscribe(stringPath); err == nil {
+		vt, at := sub.WaitVideoTrack(), sub.WaitAudioTrack()
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
 			return
 		}
 		metaData := amf.Object{
 			"MetaDataCreator": "m7s",
-			"hasVideo":        sub.OriginVideoTrack != nil,
-			"hasAudio":        sub.OriginAudioTrack != nil,
+			"hasVideo":        vt != nil,
+			"hasAudio":        at != nil,
 			"hasMatadata":     true,
 			"canSeekToEnd":    false,
 			"duration":        0,
@@ -76,37 +76,32 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			"videodatarate":   0,
 			"filesize":        0,
 		}
-		if sub.OriginVideoTrack != nil {
-			metaData["videocodecid"] = int(sub.OriginVideoTrack.CodecID)
-			metaData["width"] = sub.OriginVideoTrack.SPSInfo.Width
-			metaData["height"] = sub.OriginVideoTrack.SPSInfo.Height
-			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, sub.OriginVideoTrack.RtmpTag)
+		if vt != nil {
+			metaData["videocodecid"] = int(vt.CodecID)
+			metaData["width"] = vt.SPSInfo.Width
+			metaData["height"] = vt.SPSInfo.Height
+			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, vt.ExtraData.Payload)
 			sub.OnVideo = func(pack VideoPack) {
-				payload := pack.ToRTMPTag()
-				defer utils.RecycleSlice(payload)
-				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, pack.Timestamp, payload)
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, pack.Timestamp, pack.Payload)
 			}
 		}
-		if sub.OriginAudioTrack != nil {
-			metaData["audiocodecid"] = int(sub.OriginAudioTrack.SoundFormat)
-			metaData["audiosamplerate"] = sub.OriginAudioTrack.SoundRate
-			metaData["audiosamplesize"] = int(sub.OriginAudioTrack.SoundSize)
-			metaData["stereo"] = sub.OriginAudioTrack.Channels == 2
-			if sub.OriginAudioTrack.SoundFormat == 10 {
-				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, sub.OriginAudioTrack.RtmpTag)
+		if at != nil {
+			metaData["audiocodecid"] = int(at.CodecID)
+			metaData["audiosamplerate"] = at.SoundRate
+			metaData["audiosamplesize"] = int(at.SoundSize)
+			metaData["stereo"] = at.Channels == 2
+			if at.CodecID == 10 {
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, at.ExtraData)
 			}
-			tag0 := sub.OriginAudioTrack.RtmpTag[0]
 			sub.OnAudio = func(pack AudioPack) {
-				payload := pack.ToRTMPTag(tag0)
-				defer utils.RecycleSlice(payload)
-				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, pack.Timestamp, payload)
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, pack.Timestamp, pack.Payload)
 			}
 		}
 		if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
 			return
 		}
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, buffer.Bytes())
-		sub.Play(sub.OriginAudioTrack, sub.OriginVideoTrack)
+		sub.Play(at, vt)
 	}
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {
