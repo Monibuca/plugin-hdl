@@ -57,7 +57,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	w.Write(codec.FLVHeader)
-	sub := Subscriber{ByteStreamFormat: true, ID: r.RemoteAddr, Type: "FLV", Ctx2: r.Context()}
+	sub := Subscriber{ID: r.RemoteAddr, Type: "FLV", Ctx2: r.Context()}
 	if err := sub.Subscribe(stringPath); err == nil {
 		vt, at := sub.WaitVideoTrack(), sub.WaitAudioTrack()
 		var buffer bytes.Buffer
