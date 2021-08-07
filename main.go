@@ -81,8 +81,8 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			metaData["width"] = vt.SPSInfo.Width
 			metaData["height"] = vt.SPSInfo.Height
 			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, vt.ExtraData.Payload)
-			sub.OnVideo = func(pack VideoPack) {
-				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, pack.Timestamp, pack.Payload)
+			sub.OnVideo = func(ts uint32, pack *VideoPack) {
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, ts, pack.Payload)
 			}
 		}
 		if at != nil {
@@ -93,8 +93,8 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			if at.CodecID == 10 {
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, at.ExtraData)
 			}
-			sub.OnAudio = func(pack AudioPack) {
-				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, pack.Timestamp, pack.Payload)
+			sub.OnAudio = func(ts uint32, pack *AudioPack) {
+				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, ts, pack.Payload)
 			}
 		}
 		if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
