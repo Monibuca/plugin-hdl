@@ -18,8 +18,9 @@ var config struct {
 	ListenAddrTLS string
 	CertFile      string
 	KeyFile       string
+	AutoPullList  map[string]string
 }
-var streamPathReg = regexp.MustCompile("/(hdl/)?((.+)(\\.flv)|(.+))")
+var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
 
 func init() {
 	InstallPlugin(&PluginConfig{
@@ -36,6 +37,11 @@ func run() {
 	} else {
 		utils.Print(Green("HDL start reuse gateway port"))
 		http.HandleFunc("/hdl/", HDLHandler)
+	}
+	for streamPath, url := range config.AutoPullList {
+		if err := PullStream(streamPath, url); err != nil {
+			utils.Println(err)
+		}
 	}
 }
 
