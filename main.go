@@ -18,19 +18,38 @@ var config struct {
 	ListenAddrTLS string
 	CertFile      string
 	KeyFile       string
+	Reconnect     bool
 	AutoPullList  map[string]string
 }
 var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
-
-func init() {
-	InstallPlugin(&PluginConfig{
-		Name:   "HDL",
-		Config: &config,
-		Run:    run,
-	})
+var pconfig = PluginConfig{
+	Name:   "HDL",
+	Config: &config,
 }
 
+func init() {
+	pconfig.Install(run)
+}
 func run() {
+	http.HandleFunc("/api/hdl/pull", func(rw http.ResponseWriter, r *http.Request) {
+		targetURL := r.URL.Query().Get("target")
+		streamPath := r.URL.Query().Get("streamPath")
+		save := r.URL.Query().Get("save")
+		if err := PullStream(streamPath, targetURL); err == nil {
+			if save != "" {
+				if config.AutoPullList == nil {
+					config.AutoPullList = make(map[string]string)
+				}
+				config.AutoPullList[streamPath] = targetURL
+				if err = pconfig.Save(); err != nil {
+					utils.Println(err)
+				}
+			}
+			rw.WriteHeader(200)
+		} else {
+			rw.WriteHeader(500)
+		}
+	})
 	if config.ListenAddr != "" || config.ListenAddrTLS != "" {
 		utils.Print(Green("HDL start at "), BrightBlue(config.ListenAddr), BrightBlue(config.ListenAddrTLS))
 		utils.ListenAddrs(config.ListenAddr, config.ListenAddrTLS, config.CertFile, config.KeyFile, http.HandlerFunc(HDLHandler))

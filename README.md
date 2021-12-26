@@ -21,14 +21,17 @@ ListenAddr = ":2020" #默认为空
 ListenAddrTLS = ":2021" #默认为空
 CertFile = "file.cert" #默认为空
 KeyFile = "file.key" #默认为空
+Reconnect = false #默认为false
+[HDL.AutoPullList]
+"live/hdl" = "http://flv.bdplay.nodemedia.cn/live/bbb.flv"
 ```
 - `ListenAddr`是监听的地址，如果配置为空字符串，则是复用Gateway插件监听的公共端口
 - `ListenAddrTLS` 公共https监听端口，默认为空，则不监听
 - `CertFile` https用的证书，默认为空
 - `KeyFile` https用的证书的key，默认为空
-
+- Reconnect 拉流断开后是否重连
+- `HDL.AutoPullList` 自动拉流，可以设置多个，key为流唯一标识，value为拉流地址
 ## 插件功能
-
 
 ### 从m7s拉取http-flv协议流
 如果m7s中已经存在live/test流的话就可以用http-flv协议进行播放
@@ -40,3 +43,10 @@ ffplay -i http://localhost:8080/hdl/live/test.flv
 ```bash
 ffplay -i http://localhost:2020/live/test.flv
 ```
+### m7s从远程拉取http-flv协议流
+
+可调用接口
+`/hdl/pull/pull?target=[HTTP-FLV地址]&streamPath=[流标识]&save=[是否保存配置（留空则不保存）]`
+
+或者编程方式拉流
+`PullStream(streamPath, targetURL)`
