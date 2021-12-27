@@ -50,3 +50,6 @@ ffplay -i http://localhost:2020/live/test.flv
 
 或者编程方式拉流
 `PullStream(streamPath, targetURL)`
+
+### m7s读取本地flv文件重新发布
+同上，只需要把http地址改成本地文件地址即可，如果此时开启Reconnect则会在文件读取完成后重新开始读取
