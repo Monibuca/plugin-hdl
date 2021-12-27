@@ -36,10 +36,15 @@ func pull(at *AudioTrack, vt *VideoTrack, reader io.Reader, lastDisconnect uint3
 		}
 	}
 }
+
+type HDLPuller struct{}
+
 func PullStream(streamPath, url string) error {
 	stream := Stream{
+		URL:        url,
 		Type:       "HDL Pull",
 		StreamPath: streamPath,
+		ExtraProp:  &HDLPuller{},
 	}
 	at := stream.NewAudioTrack(0)
 	vt := stream.NewVideoTrack(0)

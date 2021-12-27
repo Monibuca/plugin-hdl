@@ -3,8 +3,10 @@ package hdl
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"net/http"
 	"regexp"
+	"time"
 
 	. "github.com/Monibuca/engine/v3"
 	"github.com/Monibuca/utils/v3"
@@ -30,13 +32,38 @@ var pconfig = PluginConfig{
 func init() {
 	pconfig.Install(run)
 }
+func getHDList() (info []*Stream) {
+	for _, s := range Streams.ToList() {
+		if _, ok := s.ExtraProp.(*HDLPuller); ok {
+			info = append(info, s)
+		}
+	}
+	return
+}
 func run() {
+	http.HandleFunc("/api/hdl/list", func(rw http.ResponseWriter, r *http.Request) {
+		utils.CORS(rw, r)
+		if r.URL.Query().Get("json") != "" {
+			if jsonData, err := json.Marshal(getHDList()); err == nil {
+				rw.Write(jsonData)
+			} else {
+				rw.WriteHeader(500)
+			}
+			return
+		}
+		sse := utils.NewSSE(rw, r.Context())
+		var err error
+		for tick := time.NewTicker(time.Second); err == nil; <-tick.C {
+			err = sse.WriteJSON(getHDList())
+		}
+	})
 	http.HandleFunc("/api/hdl/pull", func(rw http.ResponseWriter, r *http.Request) {
+		utils.CORS(rw, r)
 		targetURL := r.URL.Query().Get("target")
 		streamPath := r.URL.Query().Get("streamPath")
 		save := r.URL.Query().Get("save")
 		if err := PullStream(streamPath, targetURL); err == nil {
-			if save != "" {
+			if save == "1" {
 				if config.AutoPullList == nil {
 					config.AutoPullList = make(map[string]string)
 				}
