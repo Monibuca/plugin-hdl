@@ -46,11 +46,11 @@ func PullStream(streamPath, url string) error {
 		StreamPath: streamPath,
 		ExtraProp:  &HDLPuller{},
 	}
-	at := stream.NewAudioTrack(0)
-	vt := stream.NewVideoTrack(0)
 	if strings.HasPrefix(url, "http") {
 		if res, err := http.Get(url); err == nil {
 			if stream.Publish() {
+				at := stream.NewAudioTrack(0)
+				vt := stream.NewVideoTrack(0)
 				go func() {
 					lastTs := pull(at, vt, res.Body, 0)
 					if config.Reconnect {
@@ -72,6 +72,8 @@ func PullStream(streamPath, url string) error {
 		stream.Type = "FLV File"
 		if file, err := os.Open(url); err == nil {
 			if stream.Publish() {
+				at := stream.NewAudioTrack(0)
+				vt := stream.NewVideoTrack(0)
 				go func() {
 					lastTs := pull(at, vt, file, 0)
 					if config.Reconnect {
