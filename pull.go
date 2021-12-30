@@ -75,10 +75,11 @@ func PullStream(streamPath, url string) error {
 				at := stream.NewAudioTrack(0)
 				vt := stream.NewVideoTrack(0)
 				go func() {
+					file.Seek(int64(len(codec.FLVHeader)), io.SeekStart)
 					lastTs := pull(at, vt, file, 0)
 					if config.Reconnect {
 						for stream.Err() == nil {
-							file.Seek(0, io.SeekStart)
+							file.Seek(int64(len(codec.FLVHeader)), io.SeekStart)
 							lastTs = pull(at, vt, file, lastTs)
 						}
 					} else {
