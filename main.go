@@ -60,7 +60,6 @@ func init() {
 	if plugin := InstallPlugin(config); plugin != nil {
 		plugin.HandleApi("/list", util.GetJsonHandler(getHDList, time.Second))
 		plugin.HandleFunc("/pull", func(rw http.ResponseWriter, r *http.Request) {
-			util.CORS(rw, r)
 			targetURL := r.URL.Query().Get("target")
 			streamPath := r.URL.Query().Get("streamPath")
 			save := r.URL.Query().Get("save")
@@ -111,7 +110,7 @@ func (config *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		metaData := amf.Object{
-			"MetaDataCreator": "m7s",
+			"MetaDataCreator": "m7s" + Version,
 			"hasVideo":        vt != nil,
 			"hasAudio":        at != nil,
 			"hasMatadata":     true,
