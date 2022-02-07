@@ -1,27 +1,29 @@
 package hdl
 
 import (
-	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	. "github.com/Monibuca/engine/v3"
-	"github.com/Monibuca/utils/v3/codec"
+	. "github.com/Monibuca/engine/v4"
+	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/track"
 )
 
-func pull(at *AudioTrack, vt *VideoTrack, reader io.Reader, lastDisconnect uint32) (lastTime uint32) {
+func (puller *HDLPuller) pull() {
 	head := make([]byte, len(codec.FLVHeader))
-	io.ReadFull(reader, head)
-	for startTime := time.Now(); ; {
-		if t, timestamp, payload, err := codec.ReadFLVTag(reader); err == nil {
+	io.ReadFull(puller, head)
+	startTime := time.Now()
+	for {
+		if t, timestamp, payload, err := codec.ReadFLVTag(puller); err == nil {
 			switch t {
 			case codec.FLV_TAG_TYPE_AUDIO:
-				at.PushByteStream(timestamp+lastDisconnect, payload)
+				puller.at.WriteAVCC(timestamp+puller.lastTs, payload)
 			case codec.FLV_TAG_TYPE_VIDEO:
-				vt.PushByteStream(timestamp+lastDisconnect, payload)
+				puller.vt.WriteAVCC(timestamp+puller.lastTs, payload)
 			}
 			if timestamp != 0 {
 				elapse := time.Since(startTime)
@@ -30,70 +32,83 @@ func pull(at *AudioTrack, vt *VideoTrack, reader io.Reader, lastDisconnect uint3
 					time.Sleep(time.Millisecond*time.Duration(timestamp) - elapse)
 				}
 			}
-			lastTime = timestamp
+			puller.lastTs = timestamp
 		} else {
+			puller.UnPublish()
 			return
 		}
 	}
 }
 
-type HDLPuller struct{}
+type HDLPuller struct {
+	Publisher
+	lastTs uint32 //断线前的时间戳
+	at     *track.UnknowAudio
+	vt     *track.UnknowVideo
+	io.ReadCloser
+}
 
-func PullStream(streamPath, url string) error {
-	stream := Stream{
-		URL:        url,
-		Type:       "HDL Pull",
-		StreamPath: streamPath,
-		ExtraProp:  &HDLPuller{},
-	}
-	if strings.HasPrefix(url, "http") {
-		if res, err := http.Get(url); err == nil {
-			if stream.Publish() {
-				at := stream.NewAudioTrack(0)
-				vt := stream.NewVideoTrack(0)
-				go func() {
-					lastTs := pull(at, vt, res.Body, 0)
-					if config.Reconnect {
-						for stream.Err() == nil {
-							time.Sleep(time.Second * 5)
-							lastTs = pull(at, vt, res.Body, lastTs)
-						}
-					} else {
-						stream.Close()
-					}
-				}()
+func (puller *HDLPuller) Close() {
+
+}
+
+func (puller *HDLPuller) OnStateChange(old StreamState, n StreamState) bool {
+	switch n {
+	case STATE_PUBLISHING:
+		puller.at = puller.NewAudioTrack()
+		puller.vt = puller.NewVideoTrack()
+		if puller.Type == "HDL Pull" {
+			if res, err := http.Get(puller.String()); err == nil {
+				puller.ReadCloser = res.Body
 			} else {
-				return errors.New("Bad Name")
+				return false
 			}
 		} else {
-			return err
-		}
-	} else {
-		stream.Type = "FLV File"
-		if file, err := os.Open(url); err == nil {
-			if stream.Publish() {
-				at := stream.NewAudioTrack(0)
-				vt := stream.NewVideoTrack(0)
-				go func() {
-					file.Seek(int64(len(codec.FLVHeader)), io.SeekStart)
-					lastTs := pull(at, vt, file, 0)
-					if config.Reconnect {
-						for stream.Err() == nil {
-							file.Seek(int64(len(codec.FLVHeader)), io.SeekStart)
-							lastTs = pull(at, vt, file, lastTs)
-						}
-					} else {
-						file.Close()
-						stream.Close()
-					}
-				}()
+			if file, err := os.Open(puller.String()); err == nil {
+				file.Seek(int64(len(codec.FLVHeader)), io.SeekStart)
+				puller.ReadCloser = file
 			} else {
 				file.Close()
-				return errors.New("Bad Name")
+				return false
 			}
-		} else {
-			return err
 		}
+		go puller.pull()
+	case STATE_WAITPUBLISH:
+		if config.AutoReconnect {
+			if puller.Type == "HDL Pull" {
+				if res, err := http.Get(puller.String()); err == nil {
+					puller.ReadCloser = res.Body
+				} else {
+					return true
+				}
+			} else {
+				if file, err := os.Open(puller.String()); err == nil {
+					file.Seek(int64(len(codec.FLVHeader)), io.SeekStart)
+					puller.ReadCloser = file
+				} else {
+					file.Close()
+					return true
+				}
+				go puller.pull()
+			}
+		}
+	}
+	return true
+}
+
+func PullStream(streamPath, address string) (err error) {
+	puller := &HDLPuller{}
+	puller.PullURL, err = url.Parse(address)
+	if err != nil {
+		return
+	}
+	puller.Config = config.PublishConfig
+	if strings.HasPrefix(puller.Scheme, "http") {
+		puller.Type = "HDL Pull"
+		puller.Publish(streamPath, puller)
+	} else {
+		puller.Type = "FLV File"
+		puller.Publish(streamPath, puller)
 	}
 	return nil
 }
