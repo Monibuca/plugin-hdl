@@ -62,15 +62,10 @@ func (puller *HDLPuller) pull() {
 }
 
 type HDLPuller struct {
-	Publisher
+	Puller
 	absTS uint32 //绝对时间戳
 	at    *track.UnknowAudio
 	vt    *track.UnknowVideo
-	io.ReadCloser
-}
-
-func (puller *HDLPuller) Close() {
-	puller.ReadCloser.Close()
 }
 
 func (puller *HDLPuller) OnStateChange(old StreamState, n StreamState) bool {
@@ -94,7 +89,7 @@ func (puller *HDLPuller) OnStateChange(old StreamState, n StreamState) bool {
 		}
 		go puller.pull()
 	case STATE_WAITPUBLISH:
-		if config.AutoReconnect {
+		if hdlConfig.AutoReconnect {
 			if puller.Type == "HDL Pull" {
 				if res, err := http.Get(puller.String()); err == nil {
 					puller.ReadCloser = res.Body
@@ -117,17 +112,16 @@ func (puller *HDLPuller) OnStateChange(old StreamState, n StreamState) bool {
 
 func PullStream(streamPath, address string) (err error) {
 	puller := &HDLPuller{}
-	puller.PullURL, err = url.Parse(address)
+	puller.RemoteURL, err = url.Parse(address)
 	if err != nil {
 		return
 	}
-	puller.Config = config.PublishConfig
 	if strings.HasPrefix(puller.Scheme, "http") {
 		puller.Type = "HDL Pull"
-		puller.Publish(streamPath, puller)
+		puller.Publish(streamPath, puller, hdlConfig.Publish)
 	} else {
 		puller.Type = "FLV File"
-		puller.Publish(streamPath, puller)
+		puller.Publish(streamPath, puller, hdlConfig.Publish)
 	}
 	return nil
 }

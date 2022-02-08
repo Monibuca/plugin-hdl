@@ -2,7 +2,6 @@ package hdl
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"net"
 	"net/http"
@@ -11,83 +10,61 @@ import (
 
 	. "github.com/Monibuca/engine/v4"
 	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
 	amf "github.com/zhangpeihao/goamf"
 )
 
 type HDLConfig struct {
-	HTTPConfig
-	PublishConfig
-	SubscribeConfig
-	PullConfig
-	context.Context
-	context.CancelFunc
+	config.HTTP
+	config.Publish
+	config.Subscribe
+	config.Pull
 }
 
 var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
-var config = &HDLConfig{
-	PublishConfig:   DefaultPublishConfig,
-	SubscribeConfig: DefaultSubscribeConfig,
-}
 
-func (config *HDLConfig) Update(override Config) {
+func (config *HDLConfig) Update(override config.Config) {
 	override.Unmarshal(config)
-	needListen := false
-	if config.CancelFunc == nil {
-		needListen = config.ListenAddr != "" || config.ListenAddrTLS != ""
-		if config.PullOnStart {
-			for streamPath, url := range config.AutoPullList {
-				if err := PullStream(streamPath, url); err != nil {
-					util.Println(err)
-				}
+	if config.PullOnStart {
+		for streamPath, url := range config.AutoPullList {
+			if err := PullStream(streamPath, url); err != nil {
+				util.Println(err)
 			}
 		}
-	} else {
-		if override.Has("ListenAddr") || override.Has("ListenAddrTLS") {
-			config.CancelFunc()
-			needListen = config.ListenAddr != "" || config.ListenAddrTLS != ""
-		}
 	}
-	config.Context, config.CancelFunc = context.WithCancel(Ctx)
-	if needListen {
+	if config.ListenAddr != "" || config.ListenAddrTLS != "" {
 		util.Print(Green("HDL Listen at "), BrightBlue(config.ListenAddr), BrightBlue(config.ListenAddrTLS))
-		config.Listen(config)
+		config.Listen(plugin, config)
 	}
 }
+func (config *HDLConfig) API_pull(rw http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("target")
+	streamPath := r.URL.Query().Get("streamPath")
+	save := r.URL.Query().Get("save")
+	if err := PullStream(streamPath, targetURL); err == nil {
+		if save == "1" {
+			if config.AutoPullList == nil {
+				config.AutoPullList = make(map[string]string)
+			}
+			config.AutoPullList[streamPath] = targetURL
+			if err = plugin.Save(); err != nil {
+				util.Println(err)
+			}
+		}
+		rw.WriteHeader(200)
+	} else {
+		rw.WriteHeader(500)
+	}
+}
+
+var hdlConfig = new(HDLConfig)
+var plugin = InstallPlugin(hdlConfig)
 
 func init() {
-	if plugin := InstallPlugin(config); plugin != nil {
-		plugin.HandleApi("/list", util.GetJsonHandler(getHDList, time.Second))
-		plugin.HandleFunc("/pull", func(rw http.ResponseWriter, r *http.Request) {
-			targetURL := r.URL.Query().Get("target")
-			streamPath := r.URL.Query().Get("streamPath")
-			save := r.URL.Query().Get("save")
-			if err := PullStream(streamPath, targetURL); err == nil {
-				if save == "1" {
-					if config.AutoPullList == nil {
-						config.AutoPullList = make(map[string]string)
-					}
-					config.AutoPullList[streamPath] = targetURL
-					if err = plugin.Save(); err != nil {
-						util.Println(err)
-					}
-				}
-				rw.WriteHeader(200)
-			} else {
-				rw.WriteHeader(500)
-			}
-		})
-		plugin.HandleFunc("/", config.ServeHTTP)
-	}
-}
-func getHDList() (info []*Stream) {
-	for _, s := range Streams.ToList() {
-		if _, ok := s.Publisher.(*HDLPuller); ok {
-			info = append(info, s)
-		}
-	}
-	return
+	plugin.HandleApi("/list", util.GetJsonHandler(FilterStreams[*HDLPuller], time.Second))
+	plugin.HandleFunc("/", hdlConfig.ServeHTTP)
 }
 
 func (config *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -103,14 +80,14 @@ func (config *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	sub := Subscriber{ID: r.RemoteAddr, Type: "FLV"}
-	if sub.Subscribe(stringPath, config.SubscribeConfig) {
+	if sub.Subscribe(stringPath, hdlConfig.Subscribe) {
 		vt, at := sub.WaitVideoTrack(), sub.WaitAudioTrack()
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
 			return
 		}
 		metaData := amf.Object{
-			"MetaDataCreator": "m7s" + Version,
+			"MetaDataCreator": "m7s" + Engine.Version,
 			"hasVideo":        vt != nil,
 			"hasAudio":        at != nil,
 			"hasMatadata":     true,
