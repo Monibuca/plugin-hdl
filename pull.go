@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -67,61 +66,43 @@ type HDLPuller struct {
 	at    *track.UnknowAudio
 	vt    *track.UnknowVideo
 }
+type FLVFile HDLPuller
 
-func (puller *HDLPuller) OnStateChange(old StreamState, n StreamState) bool {
-	switch n {
-	case STATE_PUBLISHING:
-		puller.at = puller.NewAudioTrack()
-		puller.vt = puller.NewVideoTrack()
-		if puller.Type == "HDL Pull" {
-			if res, err := http.Get(puller.String()); err == nil {
-				puller.ReadCloser = res.Body
-			} else {
-				return false
-			}
-		} else {
-			if file, err := os.Open(puller.String()); err == nil {
-				puller.ReadCloser = file
-			} else {
-				file.Close()
-				return false
-			}
-		}
-		go puller.pull()
-	case STATE_WAITPUBLISH:
-		if hdlConfig.AutoReconnect {
-			if puller.Type == "HDL Pull" {
-				if res, err := http.Get(puller.String()); err == nil {
-					puller.ReadCloser = res.Body
-				} else {
-					return true
-				}
-			} else {
-				if file, err := os.Open(puller.String()); err == nil {
-					puller.ReadCloser = file
-				} else {
-					file.Close()
-					return true
-				}
-				go puller.pull()
-			}
-		}
-	}
-	return true
+func (puller *FLVFile) pull() {
+	(*HDLPuller)(puller).pull()
 }
 
-func PullStream(streamPath, address string) (err error) {
-	puller := &HDLPuller{}
-	puller.RemoteURL, err = url.Parse(address)
-	if err != nil {
+func (puller *FLVFile) Pull(count int) {
+	if count == 0 {
+		puller.at = puller.NewAudioTrack()
+		puller.vt = puller.NewVideoTrack()
+	}
+	if file, err := os.Open(puller.RemoteURL); err == nil {
+		puller.Reader = file
+		puller.Closer = file
+	} else {
+		file.Close()
 		return
 	}
-	if strings.HasPrefix(puller.Scheme, "http") {
-		puller.Type = "HDL Pull"
-		puller.Publish(streamPath, puller, hdlConfig.Publish)
-	} else {
-		puller.Type = "FLV File"
-		puller.Publish(streamPath, puller, hdlConfig.Publish)
+	puller.pull()
+}
+
+func (puller *HDLPuller) Pull(count int) {
+	if count == 0 {
+		puller.at = puller.NewAudioTrack()
+		puller.vt = puller.NewVideoTrack()
 	}
-	return nil
+	if res, err := http.Get(puller.RemoteURL); err == nil {
+		puller.Reader = res.Body
+		puller.Closer = res.Body
+	}
+	puller.pull()
+}
+
+func (config *HDLConfig) PullStream(streamPath string, puller Puller) bool {
+	if strings.HasPrefix(puller.RemoteURL, "http") {
+		return puller.Publish(streamPath, &HDLPuller{Puller: puller}, Config.Publish)
+	} else {
+		return puller.Publish(streamPath, &FLVFile{Puller: puller}, Config.Publish)
+	}
 }
