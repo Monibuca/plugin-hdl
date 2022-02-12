@@ -25,35 +25,33 @@ type HDLConfig struct {
 
 var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
 
-func (config *HDLConfig) Update(override config.Config) {
-	if config.ListenAddr != "" || config.ListenAddrTLS != "" {
-		plugin.Infoln(Green("HDL Listen at "), BrightBlue(config.ListenAddr), BrightBlue(config.ListenAddrTLS))
-		config.Listen(plugin, config)
+func (c *HDLConfig) Update(override config.Config) {
+	if c.ListenAddr != "" || c.ListenAddrTLS != "" {
+		plugin.Infoln(Green("HDL Listen at "), BrightBlue(c.ListenAddr), BrightBlue(c.ListenAddrTLS))
+		c.Listen(plugin, c)
 	}
 }
-func (config *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
+func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("target")
 	streamPath := r.URL.Query().Get("streamPath")
-	if config.PullStream(streamPath, Puller{RemoteURL: targetURL, Config: &config.Pull}) {
+	if c.PullStream(streamPath, Puller{RemoteURL: targetURL, Config: &c.Pull}) {
 		if r.URL.Query().Get("save") != "" {
-			if config.AutoPullList == nil {
-				config.AutoPullList = make(map[string]string)
-			}
-			config.AutoPullList[streamPath] = targetURL
+			c.AddPull(streamPath, targetURL)
+			plugin.Modified["pull"] = c.Pull
 			if err := plugin.Save(); err != nil {
 				plugin.Errorln(err)
 			}
 		}
 	}
 }
-func (config *HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
+func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
 	util.ReturnJson(FilterStreams[*HDLPuller], time.Second, rw, r)
 }
 
 var Config = new(HDLConfig)
 var plugin = InstallPlugin(Config)
 
-func (config *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
 	if len(parts) == 0 {
 		w.WriteHeader(404)
