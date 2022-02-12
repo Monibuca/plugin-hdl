@@ -66,10 +66,9 @@ type HDLPuller struct {
 	at    *track.UnknowAudio
 	vt    *track.UnknowVideo
 }
-type FLVFile HDLPuller
-
-func (puller *FLVFile) pull() {
-	(*HDLPuller)(puller).pull()
+// 用于发布FLV文件
+type FLVFile struct {
+	HDLPuller
 }
 
 func (puller *FLVFile) Pull(count int) {
@@ -95,14 +94,17 @@ func (puller *HDLPuller) Pull(count int) {
 	if res, err := http.Get(puller.RemoteURL); err == nil {
 		puller.Reader = res.Body
 		puller.Closer = res.Body
+	} else {
+		puller.Error(err)
+		return
 	}
 	puller.pull()
 }
 
 func (config *HDLConfig) PullStream(streamPath string, puller Puller) bool {
-	if strings.HasPrefix(puller.RemoteURL, "http") {
-		return puller.Publish(streamPath, &HDLPuller{Puller: puller}, Config.Publish)
-	} else {
-		return puller.Publish(streamPath, &FLVFile{Puller: puller}, Config.Publish)
+	var puber IPublisher = &HDLPuller{Puller: puller}
+	if !strings.HasPrefix(puller.RemoteURL, "http") {
+		puber = &FLVFile{HDLPuller: *puber.(*HDLPuller)}
 	}
+	return puber.Publish(streamPath, puber, Config.Publish)
 }

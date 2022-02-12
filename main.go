@@ -27,7 +27,7 @@ var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
 
 func (c *HDLConfig) Update(override config.Config) {
 	if c.ListenAddr != "" || c.ListenAddrTLS != "" {
-		plugin.Infoln(Green("HDL Listen at "), BrightBlue(c.ListenAddr), BrightBlue(c.ListenAddrTLS))
+		plugin.Info(Green("HDL Listen at "), BrightBlue(c.ListenAddr), BrightBlue(c.ListenAddrTLS))
 		c.Listen(plugin, c)
 	}
 }
@@ -39,7 +39,7 @@ func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
 			c.AddPull(streamPath, targetURL)
 			plugin.Modified["pull"] = c.Pull
 			if err := plugin.Save(); err != nil {
-				plugin.Errorln(err)
+				plugin.Error(err)
 			}
 		}
 	}
@@ -66,14 +66,16 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub := Subscriber{ID: r.RemoteAddr, Type: "FLV"}
 	if sub.Subscribe(stringPath, Config.Subscribe) {
 		vt, at := sub.WaitVideoTrack(), sub.WaitAudioTrack()
+		hasVideo := vt != nil
+		hasAudio := at != nil
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
 			return
 		}
 		metaData := amf.Object{
 			"MetaDataCreator": "m7s" + Engine.Version,
-			"hasVideo":        vt != nil,
-			"hasAudio":        at != nil,
+			"hasVideo":        hasVideo,
+			"hasAudio":        hasAudio,
 			"hasMatadata":     true,
 			"canSeekToEnd":    false,
 			"duration":        0,
@@ -86,36 +88,38 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var flags byte
-		if at != nil {
+		if hasAudio {
 			flags |= (1 << 2)
 		}
-		if vt != nil {
+		if hasVideo {
 			flags |= 1
 		}
 		w.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
-		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
-		if vt != nil {
+		if hasVideo {
 			metaData["videocodecid"] = int(vt.CodecID)
 			metaData["width"] = vt.SPSInfo.Width
 			metaData["height"] = vt.SPSInfo.Height
-			vt.DecoderConfiguration.FLV.WriteTo(w)
 			sub.OnVideo = func(frame *VideoFrame) error {
 				frame.FLV.WriteTo(w)
 				return r.Context().Err()
 			}
 		}
-		if at != nil {
+		if hasVideo {
 			metaData["audiocodecid"] = int(at.CodecID)
 			metaData["audiosamplerate"] = at.SampleRate
 			metaData["audiosamplesize"] = at.SampleSize
 			metaData["stereo"] = at.Channels == 2
-			if at.CodecID == 10 {
-				at.DecoderConfiguration.FLV.WriteTo(w)
-			}
 			sub.OnAudio = func(frame *AudioFrame) error {
 				frame.FLV.WriteTo(w)
 				return r.Context().Err()
 			}
+		}
+		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
+		if hasVideo {
+			vt.DecoderConfiguration.FLV.WriteTo(w)
+		}
+		if hasAudio && at.CodecID == codec.CodecID_AAC {
+			at.DecoderConfiguration.FLV.WriteTo(w)
 		}
 		sub.Play(at, vt)
 	} else {
