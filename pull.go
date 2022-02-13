@@ -60,12 +60,16 @@ func (puller *HDLPuller) pull() {
 	}
 }
 
+var _ IPuller = (*HDLPuller)(nil)
+var _ IPuller = (*FLVFile)(nil)
+
 type HDLPuller struct {
 	Puller
 	absTS uint32 //绝对时间戳
 	at    *track.UnknowAudio
 	vt    *track.UnknowVideo
 }
+
 // 用于发布FLV文件
 type FLVFile struct {
 	HDLPuller
