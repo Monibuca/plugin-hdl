@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	. "github.com/Monibuca/engine/v4"
 	"github.com/Monibuca/engine/v4/codec"
-	"github.com/Monibuca/engine/v4/track"
 	"github.com/Monibuca/engine/v4/util"
+	"go.uber.org/zap"
 )
 
 func (puller *HDLPuller) pull() {
+	puller.ReConnectCount++
 	head := util.Buffer(make([]byte, len(codec.FLVHeader)))
 	reader := bufio.NewReader(puller)
 	_, err := io.ReadFull(reader, head)
@@ -22,10 +22,8 @@ func (puller *HDLPuller) pull() {
 		return
 	}
 	head.Reset()
-	var startTime time.Time
 	var startTs uint32
-	defer puller.UnPublish()
-	for offsetTs := puller.absTS; err == nil; _, err = io.ReadFull(reader, head[:4]) {
+	for offsetTs := puller.absTS; err == nil && puller.Err() == nil; _, err = io.ReadFull(reader, head[:4]) {
 		tmp := head.SubBuf(0, 11)
 		_, err = io.ReadFull(reader, tmp)
 		if err != nil {
@@ -34,81 +32,75 @@ func (puller *HDLPuller) pull() {
 		t := tmp.ReadByte()
 		dataSize := tmp.ReadUint24()
 		timestamp := tmp.ReadUint24() | uint32(tmp.ReadByte())<<24
+		if startTs == 0 {
+			startTs = timestamp
+		}
 		tmp.ReadUint24()
 		payload := make([]byte, dataSize)
 		_, err = io.ReadFull(reader, payload)
 		if err != nil {
 			return
 		}
-		timestamp -= startTs // 相对时间戳
-		puller.absTS = offsetTs + timestamp
+		puller.absTS = offsetTs + (timestamp - startTs)
 		switch t {
 		case codec.FLV_TAG_TYPE_AUDIO:
-			puller.at.WriteAVCC(puller.absTS, payload)
+			puller.AudioTrack.WriteAVCC(puller.absTS, payload)
 		case codec.FLV_TAG_TYPE_VIDEO:
-			puller.vt.WriteAVCC(puller.absTS, payload)
-		}
-		if timestamp != 0 {
-			if startTs == 0 {
-				startTs = timestamp
-				startTime = time.Now()
-			} else if fast := time.Duration(timestamp)*time.Millisecond - time.Since(startTime); fast > 0 {
-				// 如果读取过快，导致时间戳超过真正流逝的时间，就需要睡眠，降低速度
-				time.Sleep(fast)
-			}
+			puller.VideoTrack.WriteAVCC(puller.absTS, payload)
 		}
 	}
 }
-
-var _ IPuller = (*HDLPuller)(nil)
-var _ IPuller = (*FLVFile)(nil)
 
 type HDLPuller struct {
+	Publisher
 	Puller
 	absTS uint32 //绝对时间戳
-	at    *track.UnknowAudio
-	vt    *track.UnknowVideo
 }
 
-// 用于发布FLV文件
-type FLVFile struct {
-	HDLPuller
+func (puller *HDLPuller) OnEvent(event any) {
+	switch v := event.(type) {
+	case PullEvent:
+		if v > 0 {
+			go func(count PullEvent) {
+				puller.pull() //阻塞拉流
+				// 如果流没有被关闭，则重连，重拉
+				if !puller.Stream.IsClosed() {
+					puller.OnEvent(count)
+				}
+			}(v + 1)
+		} else {
+			// TODO: 发布失败重新发布
+			if plugin.Publish(puller.StreamPath, puller) {
+				if strings.HasPrefix(puller.RemoteURL, "http") {
+					if res, err := http.Get(puller.RemoteURL); err == nil {
+						puller.Reader = res.Body
+						puller.Closer = res.Body
+					} else {
+						puller.Error(puller.RemoteURL, zap.Error(err))
+						return
+					}
+				} else {
+					if res, err := os.Open(puller.RemoteURL); err == nil {
+						puller.Reader = res
+						puller.Closer = res
+					} else {
+						puller.Error(puller.RemoteURL, zap.Error(err))
+						return
+					}
+				}
+				// 注入context
+				puller.OnEvent(Engine)
+				puller.OnEvent(PullEvent(1))
+			}
+		}
+	default:
+		puller.Publisher.OnEvent(event)
+	}
 }
 
-func (puller *FLVFile) Pull(count int) {
-	if count == 0 {
-		puller.at = puller.NewAudioTrack()
-		puller.vt = puller.NewVideoTrack()
+func (config *HDLConfig) PullStream(puller Puller) {
+	client := &HDLPuller{
+		Puller: puller,
 	}
-	if file, err := os.Open(puller.RemoteURL); err == nil {
-		puller.Reader = file
-		puller.Closer = file
-	} else {
-		file.Close()
-		return
-	}
-	puller.pull()
-}
-
-func (puller *HDLPuller) Pull(count int) {
-	if count == 0 {
-		puller.at = puller.NewAudioTrack()
-		puller.vt = puller.NewVideoTrack()
-	}
-	if res, err := http.Get(puller.RemoteURL); err == nil {
-		puller.Reader = res.Body
-		puller.Closer = res.Body
-	} else {
-		puller.Error(err)
-		return
-	}
-	puller.pull()
-}
-
-func (config *HDLConfig) PullStream(streamPath string, puller Puller) bool {
-	var puber IPublisher = &HDLPuller{Puller: puller}
-	if !strings.HasPrefix(puller.RemoteURL, "http") {
-		puber = &FLVFile{HDLPuller: *puber.(*HDLPuller)}
-	}
-	return puber.Publish(streamPath, puber, Config.Publish)
+	client.OnEvent(PullEvent(0))
 }

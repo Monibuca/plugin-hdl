@@ -10,10 +10,12 @@ import (
 
 	. "github.com/Monibuca/engine/v4"
 	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
 	amf "github.com/zhangpeihao/goamf"
+	"go.uber.org/zap"
 )
 
 type HDLConfig struct {
@@ -27,20 +29,22 @@ var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
 
 func (c *HDLConfig) Update(override config.Config) {
 	if c.ListenAddr != "" || c.ListenAddrTLS != "" {
-		plugin.Info(Green("HDL Listen at "), BrightBlue(c.ListenAddr), BrightBlue(c.ListenAddrTLS))
+		plugin.Info(Green("HDL Server Start").String(), zap.String("ListenAddr", c.ListenAddr), zap.String("ListenAddrTLS", c.ListenAddrTLS))
 		c.Listen(plugin, c)
 	}
 }
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
-	targetURL := r.URL.Query().Get("target")
-	streamPath := r.URL.Query().Get("streamPath")
-	if c.PullStream(streamPath, Puller{RemoteURL: targetURL, Config: &c.Pull}) {
-		if r.URL.Query().Get("save") != "" {
-			c.AddPull(streamPath, targetURL)
-			plugin.Modified["pull"] = c.Pull
-			if err := plugin.Save(); err != nil {
-				plugin.Error(err)
-			}
+	var puller Puller
+	puller.StreamPath = r.URL.Query().Get("streamPath")
+	puller.RemoteURL = r.URL.Query().Get("target")
+	puller.Config = &c.Pull
+	c.PullStream(puller)
+
+	if r.URL.Query().Get("save") != "" {
+		c.AddPull(puller.StreamPath, puller.RemoteURL)
+		plugin.Modified["pull"] = c.Pull
+		if err := plugin.Save(); err != nil {
+			plugin.Error("save faild", zap.Error(err))
 		}
 	}
 }
@@ -49,8 +53,31 @@ func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
 }
 
 var Config = new(HDLConfig)
+
+// 确保HDLConfig实现了PullPlugin接口
+var _ PullPlugin = Config
+
 var plugin = InstallPlugin(Config)
 
+type HDLSubscriber struct {
+	Subscriber
+}
+
+func (sub *HDLSubscriber) OnEvent(event any) {
+	switch v := event.(type) {
+	case AudioDeConf:
+		if sub.AudioTrack.IsAAC() {
+			v.FLV.WriteTo(sub)
+		}
+	case VideoDeConf:
+		v.FLV.WriteTo(sub)
+	case common.MediaFrame:
+		flvTag := v.GetFLV()
+		flvTag.WriteTo(sub)
+	default:
+		sub.Subscriber.OnEvent(event)
+	}
+}
 func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
 	if len(parts) == 0 {
@@ -63,11 +90,18 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
-	sub := Subscriber{ID: r.RemoteAddr, Type: "FLV"}
-	if sub.Subscribe(stringPath, Config.Subscribe) {
-		vt, at := sub.WaitVideoTrack(), sub.WaitAudioTrack()
-		hasVideo := vt != nil
-		hasAudio := at != nil
+	sub := &HDLSubscriber{}
+	sub.ID = r.RemoteAddr
+	sub.OnEvent(r.Context())
+	if plugin.Subscribe(stringPath, sub) {
+		if sub.Stream.Publisher == nil {
+			w.WriteHeader(404)
+			return
+		}
+		sub.Writer = w
+		at, vt := sub.AudioTrack, sub.VideoTrack
+		hasVideo := at != nil
+		hasAudio := vt != nil
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
 			return
@@ -99,29 +133,15 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			metaData["videocodecid"] = int(vt.CodecID)
 			metaData["width"] = vt.SPSInfo.Width
 			metaData["height"] = vt.SPSInfo.Height
-			sub.OnVideo = func(frame *VideoFrame) error {
-				frame.FLV.WriteTo(w)
-				return r.Context().Err()
-			}
 		}
 		if hasVideo {
 			metaData["audiocodecid"] = int(at.CodecID)
 			metaData["audiosamplerate"] = at.SampleRate
 			metaData["audiosamplesize"] = at.SampleSize
 			metaData["stereo"] = at.Channels == 2
-			sub.OnAudio = func(frame *AudioFrame) error {
-				frame.FLV.WriteTo(w)
-				return r.Context().Err()
-			}
 		}
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
-		if hasVideo {
-			vt.DecoderConfiguration.FLV.WriteTo(w)
-		}
-		if hasAudio && at.CodecID == codec.CodecID_AAC {
-			at.DecoderConfiguration.FLV.WriteTo(w)
-		}
-		sub.Play(at, vt)
+		sub.PlayBlock(sub)
 	} else {
 		w.WriteHeader(500)
 	}
