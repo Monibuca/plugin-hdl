@@ -10,7 +10,6 @@ import (
 
 	. "github.com/Monibuca/engine/v4"
 	"github.com/Monibuca/engine/v4/codec"
-	"github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
@@ -27,12 +26,18 @@ type HDLConfig struct {
 
 var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
 
-func (c *HDLConfig) Update(override config.Config) {
-	if c.ListenAddr != "" || c.ListenAddrTLS != "" {
-		plugin.Info(Green("HDL Server Start").String(), zap.String("ListenAddr", c.ListenAddr), zap.String("ListenAddrTLS", c.ListenAddrTLS))
-		c.Listen(plugin, c)
+func (c *HDLConfig) OnEvent(event any) {
+	switch event.(type) {
+	case FirstConfig:
+		if c.ListenAddr != "" || c.ListenAddrTLS != "" {
+			plugin.Info(Green("HDL Server Start").String(), zap.String("ListenAddr", c.ListenAddr), zap.String("ListenAddrTLS", c.ListenAddrTLS))
+			go c.Listen(plugin, c)
+		} else {
+			plugin.Info(Green("HDL start reuse engine port").String())
+		}
 	}
 }
+
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
 	var puller Puller
 	puller.StreamPath = r.URL.Query().Get("streamPath")
@@ -55,7 +60,6 @@ func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
 var Config = new(HDLConfig)
 
 // 确保HDLConfig实现了PullPlugin接口
-var _ PullPlugin = Config
 
 var plugin = InstallPlugin(Config)
 
@@ -65,19 +69,14 @@ type HDLSubscriber struct {
 
 func (sub *HDLSubscriber) OnEvent(event any) {
 	switch v := event.(type) {
-	case AudioDeConf:
-		if sub.AudioTrack.IsAAC() {
-			v.FLV.WriteTo(sub)
-		}
-	case VideoDeConf:
-		v.FLV.WriteTo(sub)
-	case common.MediaFrame:
+	case HaveFLV:
 		flvTag := v.GetFLV()
 		flvTag.WriteTo(sub)
 	default:
 		sub.Subscriber.OnEvent(event)
 	}
 }
+
 func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
 	if len(parts) == 0 {
@@ -93,7 +92,7 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub := &HDLSubscriber{}
 	sub.ID = r.RemoteAddr
 	sub.OnEvent(r.Context())
-	if plugin.Subscribe(stringPath, sub) {
+	if err := plugin.Subscribe(stringPath, sub); err == nil {
 		if sub.Stream.Publisher == nil {
 			w.WriteHeader(404)
 			return
@@ -143,7 +142,7 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
 		sub.PlayBlock(sub)
 	} else {
-		w.WriteHeader(500)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {

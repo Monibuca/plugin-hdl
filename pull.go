@@ -70,7 +70,7 @@ func (puller *HDLPuller) OnEvent(event any) {
 			}(v + 1)
 		} else {
 			// TODO: 发布失败重新发布
-			if plugin.Publish(puller.StreamPath, puller) {
+			if plugin.Publish(puller.StreamPath, puller) == nil {
 				if strings.HasPrefix(puller.RemoteURL, "http") {
 					if res, err := http.Get(puller.RemoteURL); err == nil {
 						puller.Reader = res.Body
