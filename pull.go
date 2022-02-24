@@ -9,15 +9,45 @@ import (
 
 	. "github.com/Monibuca/engine/v4"
 	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/log"
 	"github.com/Monibuca/engine/v4/util"
 	"go.uber.org/zap"
 )
 
-func (puller *HDLPuller) pull() {
+func (puller *HDLPuller) connect() (err error) {
 	puller.ReConnectCount++
+	log.Info("connect", zap.String("remoteURL", puller.RemoteURL))
+	if strings.HasPrefix(puller.RemoteURL, "http") {
+		var res *http.Response
+		if res, err = http.Get(puller.RemoteURL); err == nil {
+			puller.OnEvent(res.Body)
+		}
+	} else {
+		var res *os.File
+		if res, err = os.Open(puller.RemoteURL); err == nil {
+			puller.OnEvent(res)
+		}
+	}
+	if err != nil {
+		log.Error("connect", zap.Error(err))
+	}
+	return
+}
+func (puller *HDLPuller) pull() {
+	var err error
+	defer func() {
+		puller.Closer.Close()
+		if !puller.Stream.IsClosed() {
+			if err = puller.connect(); err == nil {
+				go puller.pull()
+			}
+		} else {
+			puller.Info("stop", zap.String("remoteURL", puller.RemoteURL))
+		}
+	}()
 	head := util.Buffer(make([]byte, len(codec.FLVHeader)))
 	reader := bufio.NewReader(puller)
-	_, err := io.ReadFull(reader, head)
+	_, err = io.ReadFull(reader, head)
 	if err != nil {
 		return
 	}
@@ -58,49 +88,10 @@ type HDLPuller struct {
 }
 
 func (puller *HDLPuller) OnEvent(event any) {
-	switch v := event.(type) {
-	case PullEvent:
-		if v > 0 {
-			go func(count PullEvent) {
-				puller.pull() //阻塞拉流
-				// 如果流没有被关闭，则重连，重拉
-				if !puller.Stream.IsClosed() {
-					puller.OnEvent(count)
-				}
-			}(v + 1)
-		} else {
-			// TODO: 发布失败重新发布
-			if plugin.Publish(puller.StreamPath, puller) == nil {
-				if strings.HasPrefix(puller.RemoteURL, "http") {
-					if res, err := http.Get(puller.RemoteURL); err == nil {
-						puller.Reader = res.Body
-						puller.Closer = res.Body
-					} else {
-						puller.Error(puller.RemoteURL, zap.Error(err))
-						return
-					}
-				} else {
-					if res, err := os.Open(puller.RemoteURL); err == nil {
-						puller.Reader = res
-						puller.Closer = res
-					} else {
-						puller.Error(puller.RemoteURL, zap.Error(err))
-						return
-					}
-				}
-				// 注入context
-				puller.OnEvent(Engine)
-				puller.OnEvent(PullEvent(1))
-			}
-		}
+	switch event.(type) {
+	case SEpublish:
+		go puller.pull() //阻塞拉流
 	default:
 		puller.Publisher.OnEvent(event)
 	}
-}
-
-func (config *HDLConfig) PullStream(puller Puller) {
-	client := &HDLPuller{
-		Puller: puller,
-	}
-	client.OnEvent(PullEvent(0))
 }

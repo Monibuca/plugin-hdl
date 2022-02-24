@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"net"
 	"net/http"
-	"regexp"
+	"strings"
 	"time"
 
 	. "github.com/Monibuca/engine/v4"
@@ -24,10 +24,8 @@ type HDLConfig struct {
 	config.Pull
 }
 
-var streamPathReg = regexp.MustCompile(`/(hdl/)?((.+)(\.flv)|(.+))`)
-
 func (c *HDLConfig) OnEvent(event any) {
-	switch event.(type) {
+	switch v := event.(type) {
 	case FirstConfig:
 		if c.ListenAddr != "" || c.ListenAddrTLS != "" {
 			plugin.Info(Green("HDL Server Start").String(), zap.String("ListenAddr", c.ListenAddr), zap.String("ListenAddrTLS", c.ListenAddrTLS))
@@ -35,33 +33,37 @@ func (c *HDLConfig) OnEvent(event any) {
 		} else {
 			plugin.Info(Green("HDL start reuse engine port").String())
 		}
+	case PullerPromise:
+		puller := v.Value
+		client := &HDLPuller{
+			Puller: puller,
+		}
+		err := client.connect()
+		if err == nil {
+			if err = plugin.Publish(puller.StreamPath, client); err == nil {
+				v.Resolve(util.Null)
+				break
+			}
+		}
+		client.Error(puller.RemoteURL, zap.Error(err))
+		v.Reject(err)
 	}
 }
 
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
-	var puller Puller
-	puller.StreamPath = r.URL.Query().Get("streamPath")
-	puller.RemoteURL = r.URL.Query().Get("target")
-	puller.Config = &c.Pull
-	c.PullStream(puller)
-
-	if r.URL.Query().Get("save") != "" {
-		c.AddPull(puller.StreamPath, puller.RemoteURL)
-		plugin.Modified["pull"] = c.Pull
-		if err := plugin.Save(); err != nil {
-			plugin.Error("save faild", zap.Error(err))
-		}
+	err := plugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), r.URL.Query().Has("save"))
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusBadRequest)
 	}
 }
+
 func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
 	util.ReturnJson(FilterStreams[*HDLPuller], time.Second, rw, r)
 }
 
-var Config = new(HDLConfig)
-
 // 确保HDLConfig实现了PullPlugin接口
 
-var plugin = InstallPlugin(Config)
+var plugin = InstallPlugin(new(HDLConfig))
 
 type HDLSubscriber struct {
 	Subscriber
@@ -78,26 +80,14 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 }
 
 func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	parts := streamPathReg.FindStringSubmatch(r.RequestURI)
-	if len(parts) == 0 {
-		w.WriteHeader(404)
-		return
-	}
-	stringPath := parts[3]
-	if stringPath == "" {
-		stringPath = parts[5]
-	}
+	streamPath := strings.TrimPrefix(r.URL.Path, "/hls")
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	sub := &HDLSubscriber{}
 	sub.ID = r.RemoteAddr
-	sub.OnEvent(r.Context())
-	if err := plugin.Subscribe(stringPath, sub); err == nil {
-		if sub.Stream.Publisher == nil {
-			w.WriteHeader(404)
-			return
-		}
-		sub.Writer = w
+	sub.OnEvent(r.Context()) //注入父级Context
+	sub.OnEvent(w)           //注入Writer
+	if err := plugin.Subscribe(streamPath, sub); err == nil {
 		at, vt := sub.AudioTrack, sub.VideoTrack
 		hasVideo := at != nil
 		hasAudio := vt != nil
