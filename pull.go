@@ -20,12 +20,12 @@ func (puller *HDLPuller) connect() (err error) {
 	if strings.HasPrefix(puller.RemoteURL, "http") {
 		var res *http.Response
 		if res, err = http.Get(puller.RemoteURL); err == nil {
-			puller.OnEvent(res.Body)
+			puller.SetIO(res.Body)
 		}
 	} else {
 		var res *os.File
 		if res, err = os.Open(puller.RemoteURL); err == nil {
-			puller.OnEvent(res)
+			puller.SetIO(res)
 		}
 	}
 	if err != nil {

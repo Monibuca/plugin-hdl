@@ -86,8 +86,8 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "video/x-flv")
 	sub := &HDLSubscriber{}
 	sub.ID = r.RemoteAddr
-	sub.OnEvent(r.Context()) //注入父级Context
-	sub.OnEvent(w)           //注入Writer
+	sub.SetParentCtx(r.Context())
+	sub.SetIO(w)
 	if err := plugin.Subscribe(streamPath, sub); err == nil {
 		at, vt := sub.AudioTrack, sub.VideoTrack
 		hasVideo := at != nil
