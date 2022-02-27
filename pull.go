@@ -14,7 +14,7 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
-func (puller *HDLPuller) connect() (err error) {
+func (puller *HDLPuller) Connect() (err error) {
 	puller.ReConnectCount++
 	log.Info("connect", zap.String("remoteURL", puller.RemoteURL))
 	if strings.HasPrefix(puller.RemoteURL, "http") {
@@ -33,23 +33,10 @@ func (puller *HDLPuller) connect() (err error) {
 	}
 	return
 }
-func (puller *HDLPuller) pull() {
-	var err error
-	defer func() {
-		if puller.Closer != nil {
-			puller.Closer.Close()
-		}
-		if !puller.Stream.IsClosed() {
-			if err = puller.connect(); err == nil {
-				go puller.pull()
-			}
-		} else {
-			puller.Info("stop", zap.String("remoteURL", puller.RemoteURL))
-		}
-	}()
+func (puller *HDLPuller) Pull() {
 	head := util.Buffer(make([]byte, len(codec.FLVHeader)))
 	reader := bufio.NewReader(puller)
-	_, err = io.ReadFull(reader, head)
+	_, err := io.ReadFull(reader, head)
 	if err != nil {
 		return
 	}
@@ -87,13 +74,4 @@ type HDLPuller struct {
 	Publisher
 	Puller
 	absTS uint32 //绝对时间戳
-}
-
-func (puller *HDLPuller) OnEvent(event any) {
-	switch event.(type) {
-	case SEpublish:
-		go puller.pull() //阻塞拉流
-	default:
-		puller.Publisher.OnEvent(event)
-	}
 }

@@ -33,24 +33,29 @@ func (c *HDLConfig) OnEvent(event any) {
 		} else {
 			plugin.Info(Green("HDL start reuse engine port").String())
 		}
-	case PullerPromise:
-		client := &HDLPuller{
-			Puller: v.Value,
-		}
-		err := client.connect()
-		if err == nil {
-			if err = plugin.Publish(client.StreamPath, client); err == nil {
-				v.Resolve(util.Null)
-				break
+		if c.PullOnStart {
+			for streamPath, url := range c.PullList {
+				if err := plugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
+					plugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
+				}
 			}
 		}
-		client.Error(client.RemoteURL, zap.Error(err))
-		v.Reject(err)
+	case *Stream: //按需拉流
+		if c.PullOnSubscribe {
+			for streamPath, url := range c.PullList {
+				if streamPath == v.Path {
+					if err := plugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
+						plugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
+					}
+					break
+				}
+			}
+		}
 	}
 }
 
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
-	err := plugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), r.URL.Query().Has("save"))
+	err := plugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), new(HDLPuller), r.URL.Query().Has("save"))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 	}
