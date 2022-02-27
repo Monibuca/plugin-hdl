@@ -1,4 +1,4 @@
-package hdl
+package hdl // import "m7s.live/plugin/hdl/v4"
 
 import (
 	"bytes"
@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/Monibuca/engine/v4"
-	"github.com/Monibuca/engine/v4/codec"
-	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
 	amf "github.com/zhangpeihao/goamf"
 	"go.uber.org/zap"
+	. "m7s.live/engine/v4"
+	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/util"
 )
 
 type HDLConfig struct {
@@ -34,18 +34,17 @@ func (c *HDLConfig) OnEvent(event any) {
 			plugin.Info(Green("HDL start reuse engine port").String())
 		}
 	case PullerPromise:
-		puller := v.Value
 		client := &HDLPuller{
-			Puller: puller,
+			Puller: v.Value,
 		}
 		err := client.connect()
 		if err == nil {
-			if err = plugin.Publish(puller.StreamPath, client); err == nil {
+			if err = plugin.Publish(client.StreamPath, client); err == nil {
 				v.Resolve(util.Null)
 				break
 			}
 		}
-		client.Error(puller.RemoteURL, zap.Error(err))
+		client.Error(client.RemoteURL, zap.Error(err))
 		v.Reject(err)
 	}
 }
@@ -73,14 +72,16 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 	switch v := event.(type) {
 	case HaveFLV:
 		flvTag := v.GetFLV()
-		flvTag.WriteTo(sub)
+		if _, err := flvTag.WriteTo(sub); err != nil {
+			sub.Stop()
+		}
 	default:
 		sub.Subscriber.OnEvent(event)
 	}
 }
 
 func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	streamPath := strings.TrimPrefix(r.URL.Path, "/hls")
+	streamPath := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/hdl/"), ".flv")
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	sub := &HDLSubscriber{}
@@ -113,22 +114,19 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var flags byte
 		if hasAudio {
 			flags |= (1 << 2)
-		}
-		if hasVideo {
-			flags |= 1
-		}
-		w.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
-		if hasVideo {
-			metaData["videocodecid"] = int(vt.CodecID)
-			metaData["width"] = vt.SPSInfo.Width
-			metaData["height"] = vt.SPSInfo.Height
-		}
-		if hasVideo {
 			metaData["audiocodecid"] = int(at.CodecID)
 			metaData["audiosamplerate"] = at.SampleRate
 			metaData["audiosamplesize"] = at.SampleSize
 			metaData["stereo"] = at.Channels == 2
 		}
+		if hasVideo {
+			flags |= 1
+			metaData["videocodecid"] = int(vt.CodecID)
+			metaData["width"] = vt.SPSInfo.Width
+			metaData["height"] = vt.SPSInfo.Height
+		}
+		// 写入FLV头
+		w.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
 		sub.PlayBlock(sub)
 	} else {

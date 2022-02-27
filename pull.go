@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	. "github.com/Monibuca/engine/v4"
-	"github.com/Monibuca/engine/v4/codec"
-	"github.com/Monibuca/engine/v4/log"
-	"github.com/Monibuca/engine/v4/util"
 	"go.uber.org/zap"
+	. "m7s.live/engine/v4"
+	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
 func (puller *HDLPuller) connect() (err error) {
@@ -36,7 +36,9 @@ func (puller *HDLPuller) connect() (err error) {
 func (puller *HDLPuller) pull() {
 	var err error
 	defer func() {
-		puller.Closer.Close()
+		if puller.Closer != nil {
+			puller.Closer.Close()
+		}
 		if !puller.Stream.IsClosed() {
 			if err = puller.connect(); err == nil {
 				go puller.pull()
