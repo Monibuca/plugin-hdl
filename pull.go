@@ -15,7 +15,7 @@ import (
 )
 
 func (puller *HDLPuller) Connect() (err error) {
-	puller.ReConnectCount++
+	
 	log.Info("connect", zap.String("remoteURL", puller.RemoteURL))
 	if strings.HasPrefix(puller.RemoteURL, "http") {
 		var res *http.Response

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/logrusorgru/aurora"
 	amf "github.com/zhangpeihao/goamf"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4"
@@ -27,12 +26,6 @@ type HDLConfig struct {
 func (c *HDLConfig) OnEvent(event any) {
 	switch v := event.(type) {
 	case FirstConfig:
-		if c.ListenAddr != "" || c.ListenAddrTLS != "" {
-			plugin.Info(Green("HDL Server Start").String(), zap.String("ListenAddr", c.ListenAddr), zap.String("ListenAddrTLS", c.ListenAddrTLS))
-			go c.Listen(plugin, c)
-		} else {
-			plugin.Info(Green("HDL start reuse engine port").String())
-		}
 		if c.PullOnStart {
 			for streamPath, url := range c.PullList {
 				if err := plugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
