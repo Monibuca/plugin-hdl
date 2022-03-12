@@ -10,13 +10,11 @@ import (
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4"
 	"m7s.live/engine/v4/codec"
-	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
 func (puller *HDLPuller) Connect() (err error) {
-	
-	log.Info("connect", zap.String("remoteURL", puller.RemoteURL))
+	plugin.Info("connect", zap.String("remoteURL", puller.RemoteURL))
 	if strings.HasPrefix(puller.RemoteURL, "http") {
 		var res *http.Response
 		if res, err = http.Get(puller.RemoteURL); err == nil {
@@ -29,7 +27,7 @@ func (puller *HDLPuller) Connect() (err error) {
 		}
 	}
 	if err != nil {
-		log.Error("connect", zap.Error(err))
+		puller.Error("connect", zap.Error(err))
 	}
 	return
 }

@@ -68,25 +68,7 @@ type HDLSubscriber struct {
 
 func (sub *HDLSubscriber) OnEvent(event any) {
 	switch v := event.(type) {
-	case HaveFLV:
-		flvTag := v.GetFLV()
-		if _, err := flvTag.WriteTo(sub); err != nil {
-			sub.Stop()
-		}
-	default:
-		sub.Subscriber.OnEvent(event)
-	}
-}
-
-func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	streamPath := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/hdl/"), ".flv")
-	w.Header().Set("Transfer-Encoding", "chunked")
-	w.Header().Set("Content-Type", "video/x-flv")
-	sub := &HDLSubscriber{}
-	sub.ID = r.RemoteAddr
-	sub.SetParentCtx(r.Context())
-	sub.SetIO(w)
-	if err := plugin.Subscribe(streamPath, sub); err == nil {
+	case ISubscriber:
 		at, vt := sub.AudioTrack, sub.VideoTrack
 		hasVideo := at != nil
 		hasAudio := vt != nil
@@ -124,10 +106,27 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			metaData["height"] = vt.SPSInfo.Height
 		}
 		// 写入FLV头
-		w.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
-		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
-		sub.PlayBlock(sub)
-	} else {
+		sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
+		codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
+	case HaveFLV:
+		flvTag := v.GetFLV()
+		if _, err := flvTag.WriteTo(sub); err != nil {
+			sub.Stop()
+		}
+	default:
+		sub.Subscriber.OnEvent(event)
+	}
+}
+
+func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	streamPath := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/hdl/"), ".flv")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Content-Type", "video/x-flv")
+	sub := &HDLSubscriber{}
+	sub.ID = r.RemoteAddr
+	sub.SetParentCtx(r.Context())
+	sub.SetIO(w)
+	if err := plugin.SubscribeBlock(streamPath, sub); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }
