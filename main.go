@@ -116,10 +116,12 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
 			return
 		}
+		hasVideo := vt != nil
+		hasAudio := at != nil
 		metaData := amf.Object{
 			"MetaDataCreator": "m7s",
-			"hasVideo":        vt != nil,
-			"hasAudio":        at != nil,
+			"hasVideo":        hasVideo,
+			"hasAudio":        hasAudio,
 			"hasMatadata":     true,
 			"canSeekToEnd":    false,
 			"duration":        0,
@@ -129,25 +131,21 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			"filesize":        0,
 		}
 		var flags byte
-		if vt != nil {
+		if hasVideo {
 			flags |= 1
 			metaData["videocodecid"] = int(vt.CodecID)
 			metaData["width"] = vt.SPSInfo.Width
 			metaData["height"] = vt.SPSInfo.Height
-			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, vt.ExtraData.Payload)
 			sub.OnVideo = func(ts uint32, pack *VideoPack) {
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, ts, pack.Payload)
 			}
 		}
-		if at != nil {
+		if hasAudio {
 			flags |= (1 << 2)
 			metaData["audiocodecid"] = int(at.CodecID)
 			metaData["audiosamplerate"] = at.SoundRate
 			metaData["audiosamplesize"] = int(at.SoundSize)
 			metaData["stereo"] = at.Channels == 2
-			if at.CodecID == 10 {
-				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, at.ExtraData)
-			}
 			sub.OnAudio = func(ts uint32, pack *AudioPack) {
 				codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, ts, pack.Payload)
 			}
@@ -156,6 +154,12 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
+		if hasVideo {
+			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_VIDEO, 0, vt.ExtraData.Payload)
+		}
+		if hasAudio && at.CodecID == 10 {
+			codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_AUDIO, 0, at.ExtraData)
+		}
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, buffer.Bytes())
 		sub.Play(at, vt)
 	}
