@@ -108,7 +108,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
-	w.Write(codec.FLVHeader)
+
 	sub := Subscriber{ID: r.RemoteAddr, Type: "FLV", Ctx2: r.Context()}
 	if err := sub.Subscribe(stringPath); err == nil {
 		vt, at := sub.WaitVideoTrack(), sub.WaitAudioTrack()
@@ -128,7 +128,9 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			"videodatarate":   0,
 			"filesize":        0,
 		}
+		var flags byte
 		if vt != nil {
+			flags |= 1
 			metaData["videocodecid"] = int(vt.CodecID)
 			metaData["width"] = vt.SPSInfo.Width
 			metaData["height"] = vt.SPSInfo.Height
@@ -138,6 +140,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if at != nil {
+			flags |= (1 << 2)
 			metaData["audiocodecid"] = int(at.CodecID)
 			metaData["audiosamplerate"] = at.SoundRate
 			metaData["audiosamplesize"] = int(at.SoundSize)
@@ -152,6 +155,7 @@ func HDLHandler(w http.ResponseWriter, r *http.Request) {
 		if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
 			return
 		}
+		w.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
 		codec.WriteFLVTag(w, codec.FLV_TAG_TYPE_SCRIPT, 0, buffer.Bytes())
 		sub.Play(at, vt)
 	}
