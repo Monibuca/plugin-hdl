@@ -69,9 +69,8 @@ type HDLSubscriber struct {
 func (sub *HDLSubscriber) OnEvent(event any) {
 	switch v := event.(type) {
 	case ISubscriber:
-		at, vt := sub.AudioTrack, sub.VideoTrack
-		hasVideo := at != nil
-		hasAudio := vt != nil
+		at, vt := sub.Audio.Track, sub.Video.Track
+		hasAudio, hasVideo := at != nil, vt != nil
 		var buffer bytes.Buffer
 		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
 			return
