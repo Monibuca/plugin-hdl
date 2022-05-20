@@ -61,9 +61,9 @@ func (puller *HDLPuller) Pull() {
 		puller.absTS = offsetTs + (timestamp - startTs)
 		switch t {
 		case codec.FLV_TAG_TYPE_AUDIO:
-			puller.AudioTrack.WriteAVCC(puller.absTS, payload)
+			puller.WriteAVCCAudio(puller.absTS, payload)
 		case codec.FLV_TAG_TYPE_VIDEO:
-			puller.VideoTrack.WriteAVCC(puller.absTS, payload)
+			puller.WriteAVCCVideo(puller.absTS, payload)
 		}
 	}
 }
