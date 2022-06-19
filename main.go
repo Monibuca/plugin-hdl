@@ -107,9 +107,8 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 		// 写入FLV头
 		sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
 		codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
-	case HaveFLV:
-		flvTag := v.GetFLV()
-		if _, err := flvTag.WriteTo(sub); err != nil {
+	case FLVFrame:
+		if _, err := v.WriteTo(sub); err != nil {
 			sub.Stop()
 		}
 	default:
@@ -125,7 +124,7 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub.ID = r.RemoteAddr
 	sub.SetParentCtx(r.Context())
 	sub.SetIO(w)
-	if err := plugin.SubscribeBlock(streamPath, sub); err != nil {
+	if err := plugin.SubscribeBlock(streamPath, sub, SUBTYPE_FLV); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }
