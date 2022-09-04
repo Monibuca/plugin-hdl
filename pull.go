@@ -14,7 +14,7 @@ import (
 )
 
 func (puller *HDLPuller) Connect() (err error) {
-	plugin.Info("connect", zap.String("remoteURL", puller.RemoteURL))
+	HDLPlugin.Info("connect", zap.String("remoteURL", puller.RemoteURL))
 	if strings.HasPrefix(puller.RemoteURL, "http") {
 		var res *http.Response
 		if res, err = http.Get(puller.RemoteURL); err == nil {

@@ -28,8 +28,8 @@ func (c *HDLConfig) OnEvent(event any) {
 	case FirstConfig:
 		if c.PullOnStart {
 			for streamPath, url := range c.PullList {
-				if err := plugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
-					plugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
+				if err := HDLPlugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
+					HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
 				}
 			}
 		}
@@ -37,8 +37,8 @@ func (c *HDLConfig) OnEvent(event any) {
 		if c.PullOnSubscribe {
 			for streamPath, url := range c.PullList {
 				if streamPath == v.Path {
-					if err := plugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
-						plugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
+					if err := HDLPlugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
+						HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
 					}
 					break
 				}
@@ -48,9 +48,11 @@ func (c *HDLConfig) OnEvent(event any) {
 }
 
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
-	err := plugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), new(HDLPuller), r.URL.Query().Has("save"))
+	err := HDLPlugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), new(HDLPuller), r.URL.Query().Has("save"))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
+	} else {
+		rw.Write([]byte("ok"))
 	}
 }
 
@@ -60,7 +62,7 @@ func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
 
 // 确保HDLConfig实现了PullPlugin接口
 
-var plugin = InstallPlugin(new(HDLConfig))
+var HDLPlugin = InstallPlugin(new(HDLConfig))
 
 type HDLSubscriber struct {
 	Subscriber
@@ -124,7 +126,7 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub.ID = r.RemoteAddr
 	sub.SetParentCtx(r.Context())
 	sub.SetIO(w)
-	if err := plugin.SubscribeBlock(streamPath, sub, SUBTYPE_FLV); err != nil {
+	if err := HDLPlugin.SubscribeBlock(streamPath, sub, SUBTYPE_FLV); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }
