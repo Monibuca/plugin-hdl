@@ -110,8 +110,12 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 		sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
 		codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
 	case FLVFrame:
+		// t := time.Now()
+		// s := util.SizeOfBuffers(v)
 		if _, err := v.WriteTo(sub); err != nil {
 			sub.Stop()
+		// } else {
+			// println(time.Since(t)/time.Millisecond, s)
 		}
 	default:
 		sub.Subscriber.OnEvent(event)
@@ -124,12 +128,10 @@ func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		streamPath += "?" + r.URL.RawQuery
 	}
-	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Content-Type", "video/x-flv")
 	sub := &HDLSubscriber{}
 	sub.ID = r.RemoteAddr
-	sub.SetParentCtx(r.Context())
-	sub.SetIO(w)
+	sub.SetStuff(r.Context(), w)
 	if err := HDLPlugin.SubscribeBlock(streamPath, sub, SUBTYPE_FLV); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
