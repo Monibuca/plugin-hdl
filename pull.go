@@ -27,7 +27,7 @@ func (puller *HDLPuller) Connect() (err error) {
 		}
 	}
 	if err != nil {
-		puller.Error("connect", zap.Error(err))
+		HDLPlugin.Error("connect", zap.Error(err))
 	}
 	return
 }
