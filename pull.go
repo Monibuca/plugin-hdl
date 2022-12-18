@@ -1,7 +1,6 @@
 package hdl
 
 import (
-	"bufio"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +11,19 @@ import (
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/util"
 )
+
+type HDLPuller struct {
+	Publisher
+	Puller
+	absTS uint32 //绝对时间戳
+	buf   util.Buffer
+}
+
+func NewHDLPuller() *HDLPuller {
+	return &HDLPuller{
+		buf: util.Buffer(make([]byte, len(codec.FLVHeader))),
+	}
+}
 
 func (puller *HDLPuller) Connect() (err error) {
 	HDLPlugin.Info("connect", zap.String("remoteURL", puller.RemoteURL))
@@ -29,20 +41,20 @@ func (puller *HDLPuller) Connect() (err error) {
 	if err != nil {
 		HDLPlugin.Error("connect", zap.Error(err))
 	}
+	head := puller.buf.SubBuf(0, len(codec.FLVHeader))
+	_, err = io.ReadFull(puller, head)
+	if head[0] != 'F' || head[1] != 'L' || head[2] != 'V' {
+		err = codec.ErrInvalidFLV
+	}
 	return
 }
-func (puller *HDLPuller) Pull() {
-	head := util.Buffer(make([]byte, len(codec.FLVHeader)))
-	reader := bufio.NewReader(puller)
-	_, err := io.ReadFull(reader, head)
-	if err != nil {
-		return
-	}
-	head.Reset()
+
+func (puller *HDLPuller) Pull() (err error) {
+	puller.buf.Reset()
 	var startTs uint32
-	for offsetTs := puller.absTS; err == nil && puller.Err() == nil; _, err = io.ReadFull(reader, head[:4]) {
-		tmp := head.SubBuf(0, 11)
-		_, err = io.ReadFull(reader, tmp)
+	for offsetTs := puller.absTS; err == nil && puller.Err() == nil; _, err = io.ReadFull(puller, puller.buf[:4]) {
+		tmp := puller.buf.SubBuf(0, 11)
+		_, err = io.ReadFull(puller, tmp)
 		if err != nil {
 			return
 		}
@@ -54,7 +66,7 @@ func (puller *HDLPuller) Pull() {
 		}
 		tmp.ReadUint24()
 		payload := make([]byte, dataSize)
-		_, err = io.ReadFull(reader, payload)
+		_, err = io.ReadFull(puller, payload)
 		if err != nil {
 			return
 		}
@@ -66,10 +78,5 @@ func (puller *HDLPuller) Pull() {
 			puller.WriteAVCCVideo(puller.absTS, payload)
 		}
 	}
-}
-
-type HDLPuller struct {
-	Publisher
-	Puller
-	absTS uint32 //绝对时间戳
+	return
 }

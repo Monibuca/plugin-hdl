@@ -28,7 +28,7 @@ func (c *HDLConfig) OnEvent(event any) {
 	case FirstConfig:
 		if c.PullOnStart {
 			for streamPath, url := range c.PullList {
-				if err := HDLPlugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
+				if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), false); err != nil {
 					HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
 				}
 			}
@@ -37,7 +37,7 @@ func (c *HDLConfig) OnEvent(event any) {
 		if c.PullOnSubscribe {
 			for streamPath, url := range c.PullList {
 				if streamPath == v.Path {
-					if err := HDLPlugin.Pull(streamPath, url, new(HDLPuller), false); err != nil {
+					if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), false); err != nil {
 						HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
 					}
 					break
@@ -48,7 +48,7 @@ func (c *HDLConfig) OnEvent(event any) {
 }
 
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
-	err := HDLPlugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), new(HDLPuller), r.URL.Query().Has("save"))
+	err := HDLPlugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), NewHDLPuller(), r.URL.Query().Has("save"))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 	} else {
@@ -114,7 +114,7 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 		// s := util.SizeOfBuffers(v)
 		if _, err := v.WriteTo(sub); err != nil {
 			sub.Stop()
-		// } else {
+			// } else {
 			// println(time.Since(t)/time.Millisecond, s)
 		}
 	default:
