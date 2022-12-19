@@ -61,8 +61,8 @@ func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
 }
 
 // 确保HDLConfig实现了PullPlugin接口
-
-var HDLPlugin = InstallPlugin(new(HDLConfig))
+var hdlConfig = new(HDLConfig)
+var HDLPlugin = InstallPlugin(hdlConfig)
 
 type HDLSubscriber struct {
 	Subscriber
@@ -70,48 +70,14 @@ type HDLSubscriber struct {
 
 func (sub *HDLSubscriber) OnEvent(event any) {
 	switch v := event.(type) {
-	case ISubscriber:
-		at, vt := sub.Audio.Track, sub.Video.Track
-		hasAudio, hasVideo := at != nil, vt != nil
-		var buffer bytes.Buffer
-		if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
-			return
-		}
-		metaData := amf.Object{
-			"MetaDataCreator": "m7s" + Engine.Version,
-			"hasVideo":        hasVideo,
-			"hasAudio":        hasAudio,
-			"hasMatadata":     true,
-			"canSeekToEnd":    false,
-			"duration":        0,
-			"hasKeyFrames":    0,
-			"framerate":       0,
-			"videodatarate":   0,
-			"filesize":        0,
-		}
-		if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
-			return
-		}
-		var flags byte
-		if hasAudio {
-			flags |= (1 << 2)
-			metaData["audiocodecid"] = int(at.CodecID)
-			metaData["audiosamplerate"] = at.SampleRate
-			metaData["audiosamplesize"] = at.SampleSize
-			metaData["stereo"] = at.Channels == 2
-		}
-		if hasVideo {
-			flags |= 1
-			metaData["videocodecid"] = int(vt.CodecID)
-			metaData["width"] = vt.SPSInfo.Width
-			metaData["height"] = vt.SPSInfo.Height
-		}
-		// 写入FLV头
-		sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
-		codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
 	case FLVFrame:
 		// t := time.Now()
 		// s := util.SizeOfBuffers(v)
+		if hdlConfig.WriteTimeout > 0 {
+			if conn, ok := sub.Writer.(net.Conn); ok {
+				conn.SetWriteDeadline(time.Now().Add(time.Second * time.Duration(hdlConfig.WriteTimeout)))
+			}
+		}
 		if _, err := v.WriteTo(sub); err != nil {
 			sub.Stop()
 			// } else {
@@ -122,18 +88,70 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 	}
 }
 
-func (*HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (sub *HDLSubscriber) WriteFlvHeader() {
+	at, vt := sub.Audio.Track, sub.Video.Track
+	hasAudio, hasVideo := at != nil, vt != nil
+	var buffer bytes.Buffer
+	if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
+		return
+	}
+	metaData := amf.Object{
+		"MetaDataCreator": "m7s" + Engine.Version,
+		"hasVideo":        hasVideo,
+		"hasAudio":        hasAudio,
+		"hasMatadata":     true,
+		"canSeekToEnd":    false,
+		"duration":        0,
+		"hasKeyFrames":    0,
+		"framerate":       0,
+		"videodatarate":   0,
+		"filesize":        0,
+	}
+	if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
+		return
+	}
+	var flags byte
+	if hasAudio {
+		flags |= (1 << 2)
+		metaData["audiocodecid"] = int(at.CodecID)
+		metaData["audiosamplerate"] = at.SampleRate
+		metaData["audiosamplesize"] = at.SampleSize
+		metaData["stereo"] = at.Channels == 2
+	}
+	if hasVideo {
+		flags |= 1
+		metaData["videocodecid"] = int(vt.CodecID)
+		metaData["width"] = vt.SPSInfo.Width
+		metaData["height"] = vt.SPSInfo.Height
+	}
+	// 写入FLV头
+	sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
+	codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
+}
+
+func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	streamPath := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/hdl"), ".flv")
 	streamPath = strings.TrimPrefix(streamPath, "/")
 	if r.URL.RawQuery != "" {
 		streamPath += "?" + r.URL.RawQuery
 	}
 	w.Header().Set("Content-Type", "video/x-flv")
+	w.Header().Set("Transfer-Encoding", "identity")
 	sub := &HDLSubscriber{}
 	sub.ID = r.RemoteAddr
-	sub.SetStuff(r.Context(), w)
-	if err := HDLPlugin.SubscribeBlock(streamPath, sub, SUBTYPE_FLV); err != nil {
+	sub.SetParentCtx(r.Context())
+	sub.SetIO(w)
+	if err := HDLPlugin.Subscribe(streamPath, sub); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	} else {
+		w.WriteHeader(http.StatusOK)
+		if hijacker, ok := w.(http.Hijacker); ok && c.WriteTimeout > 0 {
+			conn, _, _ := hijacker.Hijack()
+			conn.SetWriteDeadline(time.Now().Add(time.Second * time.Duration(c.WriteTimeout)))
+			sub.SetIO(conn)
+		}
+		sub.WriteFlvHeader()
+		sub.PlayBlock(SUBTYPE_FLV)
 	}
 }
 func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {

@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/zhangpeihao/goamf v0.0.0-20140409082417-3ff2c19514a8
 	go.uber.org/zap v1.21.0
-	m7s.live/engine/v4 v4.8.7
+	m7s.live/engine/v4 v4.9.4
 )
 
 require (
