@@ -30,6 +30,9 @@ func (puller *HDLPuller) Connect() (err error) {
 	if strings.HasPrefix(puller.RemoteURL, "http") {
 		var res *http.Response
 		if res, err = http.Get(puller.RemoteURL); err == nil {
+			if res.StatusCode != http.StatusOK {
+				return io.EOF
+			}
 			puller.SetIO(res.Body)
 		}
 	} else {
@@ -38,13 +41,16 @@ func (puller *HDLPuller) Connect() (err error) {
 			puller.SetIO(res)
 		}
 	}
+	if err == nil {
+		head := puller.buf.SubBuf(0, len(codec.FLVHeader))
+		if _, err = io.ReadFull(puller, head); err == nil {
+			if head[0] != 'F' || head[1] != 'L' || head[2] != 'V' {
+				err = codec.ErrInvalidFLV
+			}
+		}
+	}
 	if err != nil {
 		HDLPlugin.Error("connect", zap.Error(err))
-	}
-	head := puller.buf.SubBuf(0, len(codec.FLVHeader))
-	_, err = io.ReadFull(puller, head)
-	if head[0] != 'F' || head[1] != 'L' || head[2] != 'V' {
-		err = codec.ErrInvalidFLV
 	}
 	return
 }
@@ -71,6 +77,7 @@ func (puller *HDLPuller) Pull() (err error) {
 			return
 		}
 		puller.absTS = offsetTs + (timestamp - startTs)
+		// println(t, puller.absTS)
 		switch t {
 		case codec.FLV_TAG_TYPE_AUDIO:
 			puller.WriteAVCCAudio(puller.absTS, payload)

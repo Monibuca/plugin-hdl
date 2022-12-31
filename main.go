@@ -26,29 +26,36 @@ type HDLConfig struct {
 func (c *HDLConfig) OnEvent(event any) {
 	switch v := event.(type) {
 	case FirstConfig:
-		if c.PullOnStart {
-			for streamPath, url := range c.PullList {
-				if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), false); err != nil {
-					HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
-				}
+		for streamPath, url := range c.PullOnStart {
+			if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), 0); err != nil {
+				HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
 			}
 		}
 	case *Stream: //按需拉流
-		if c.PullOnSubscribe {
-			for streamPath, url := range c.PullList {
-				if streamPath == v.Path {
-					if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), false); err != nil {
-						HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
-					}
-					break
+		for streamPath, url := range c.PullOnSub {
+			if streamPath == v.Path {
+				if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), 0); err != nil {
+					HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
 				}
+				break
 			}
 		}
 	}
 }
 
+func str2number(s string) int {
+	switch s {
+	case "1":
+		return 1
+	case "2":
+		return 2
+	default:
+		return 0
+	}
+}
+
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
-	err := HDLPlugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), NewHDLPuller(), r.URL.Query().Has("save"))
+	err := HDLPlugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), NewHDLPuller(), str2number(r.URL.Query().Get("save")))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 	} else {
@@ -135,8 +142,6 @@ func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		streamPath += "?" + r.URL.RawQuery
 	}
-	w.Header().Set("Content-Type", "video/x-flv")
-	w.Header().Set("Transfer-Encoding", "identity")
 	sub := &HDLSubscriber{}
 	sub.ID = r.RemoteAddr
 	sub.SetParentCtx(r.Context())
@@ -144,11 +149,15 @@ func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := HDLPlugin.Subscribe(streamPath, sub); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	} else {
+		w.Header().Set("Content-Type", "video/x-flv")
+		w.Header().Set("Transfer-Encoding", "identity")
 		w.WriteHeader(http.StatusOK)
 		if hijacker, ok := w.(http.Hijacker); ok && c.WriteTimeout > 0 {
 			conn, _, _ := hijacker.Hijack()
 			conn.SetWriteDeadline(time.Now().Add(time.Second * time.Duration(c.WriteTimeout)))
 			sub.SetIO(conn)
+		} else {
+			w.(http.Flusher).Flush()
 		}
 		sub.WriteFlvHeader()
 		sub.PlayBlock(SUBTYPE_FLV)
