@@ -31,6 +31,7 @@ hdl
         kickexist: false
         publishtimeout: 10
         waitclosetimeout: 0
+        delayclosetimeout: 0
     subscribe:
         subaudio: true
         subvideo: true
@@ -38,9 +39,8 @@ hdl
         waittimeout: 10
     pull:
         repull: 0
-        pullonstart: false
-        pullonsubscribe: false
-        pulllist: {}
+        pullonstart: {}
+        pullonsub: {}
 ```
 ## 插件功能
 
