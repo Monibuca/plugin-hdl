@@ -1,14 +1,11 @@
 package hdl // import "m7s.live/plugin/hdl/v4"
 
 import (
-	"bytes"
-	"encoding/binary"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	amf "github.com/zhangpeihao/goamf"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4"
 	"m7s.live/engine/v4/codec"
@@ -98,11 +95,9 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 func (sub *HDLSubscriber) WriteFlvHeader() {
 	at, vt := sub.Audio.Track, sub.Video.Track
 	hasAudio, hasVideo := at != nil, vt != nil
-	var buffer bytes.Buffer
-	if _, err := amf.WriteString(&buffer, "onMetaData"); err != nil {
-		return
-	}
-	metaData := amf.Object{
+	var amf codec.AMF
+	amf.Marshal("onMetaData")
+	metaData := codec.EcmaArray{
 		"MetaDataCreator": "m7s" + Engine.Version,
 		"hasVideo":        hasVideo,
 		"hasAudio":        hasAudio,
@@ -113,9 +108,6 @@ func (sub *HDLSubscriber) WriteFlvHeader() {
 		"framerate":       0,
 		"videodatarate":   0,
 		"filesize":        0,
-	}
-	if _, err := WriteEcmaArray(&buffer, metaData); err != nil {
-		return
 	}
 	var flags byte
 	if hasAudio {
@@ -131,9 +123,10 @@ func (sub *HDLSubscriber) WriteFlvHeader() {
 		metaData["width"] = vt.SPSInfo.Width
 		metaData["height"] = vt.SPSInfo.Height
 	}
+	amf.Marshal(metaData)
 	// 写入FLV头
 	sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
-	codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{buffer.Bytes()})
+	codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{amf.Buffer})
 }
 
 func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -162,31 +155,4 @@ func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sub.WriteFlvHeader()
 		sub.PlayBlock(SUBTYPE_FLV)
 	}
-}
-func WriteEcmaArray(w amf.Writer, o amf.Object) (n int, err error) {
-	n, err = amf.WriteMarker(w, amf.AMF0_ECMA_ARRAY_MARKER)
-	if err != nil {
-		return
-	}
-	length := int32(len(o))
-	err = binary.Write(w, binary.BigEndian, &length)
-	if err != nil {
-		return
-	}
-	n += 4
-	m := 0
-	for name, value := range o {
-		m, err = amf.WriteObjectName(w, name)
-		if err != nil {
-			return
-		}
-		n += m
-		m, err = amf.WriteValue(w, value)
-		if err != nil {
-			return
-		}
-		n += m
-	}
-	m, err = amf.WriteObjectEndMarker(w)
-	return n + m, err
 }
