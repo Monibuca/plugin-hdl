@@ -17,11 +17,13 @@ type HDLPuller struct {
 	Puller
 	absTS uint32 //绝对时间戳
 	buf   util.Buffer
+	pool  util.BytesPool
 }
 
 func NewHDLPuller() *HDLPuller {
 	return &HDLPuller{
-		buf: util.Buffer(make([]byte, len(codec.FLVHeader))),
+		buf:  util.Buffer(make([]byte, len(codec.FLVHeader))),
+		pool: make(util.BytesPool, 17),
 	}
 }
 
@@ -71,8 +73,10 @@ func (puller *HDLPuller) Pull() (err error) {
 			startTs = timestamp
 		}
 		tmp.ReadUint24()
-		payload := make([]byte, dataSize)
-		_, err = io.ReadFull(puller, payload)
+		var frame util.BLL
+		mem := puller.pool.Get(int(dataSize))
+		frame.Push(mem)
+		_, err = io.ReadFull(puller, mem.Value)
 		if err != nil {
 			return
 		}
@@ -80,9 +84,9 @@ func (puller *HDLPuller) Pull() (err error) {
 		// println(t, puller.absTS)
 		switch t {
 		case codec.FLV_TAG_TYPE_AUDIO:
-			puller.WriteAVCCAudio(puller.absTS, payload)
+			puller.WriteAVCCAudio(puller.absTS, frame)
 		case codec.FLV_TAG_TYPE_VIDEO:
-			puller.WriteAVCCVideo(puller.absTS, payload)
+			puller.WriteAVCCVideo(puller.absTS, frame)
 		}
 	}
 	return

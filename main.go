@@ -93,11 +93,11 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 }
 
 func (sub *HDLSubscriber) WriteFlvHeader() {
-	at, vt := sub.Audio.Track, sub.Video.Track
+	at, vt := sub.Audio, sub.Video
 	hasAudio, hasVideo := at != nil, vt != nil
-	var amf codec.AMF
+	var amf util.AMF
 	amf.Marshal("onMetaData")
-	metaData := codec.EcmaArray{
+	metaData := util.EcmaArray{
 		"MetaDataCreator": "m7s" + Engine.Version,
 		"hasVideo":        hasVideo,
 		"hasAudio":        hasAudio,
@@ -126,7 +126,7 @@ func (sub *HDLSubscriber) WriteFlvHeader() {
 	amf.Marshal(metaData)
 	// 写入FLV头
 	sub.Write([]byte{'F', 'L', 'V', 0x01, flags, 0, 0, 0, 9, 0, 0, 0, 0})
-	codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, net.Buffers{amf.Buffer})
+	codec.WriteFLVTag(sub, codec.FLV_TAG_TYPE_SCRIPT, 0, amf.Buffer)
 }
 
 func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
