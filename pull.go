@@ -84,9 +84,9 @@ func (puller *HDLPuller) Pull() (err error) {
 		// println(t, puller.absTS)
 		switch t {
 		case codec.FLV_TAG_TYPE_AUDIO:
-			puller.WriteAVCCAudio(puller.absTS, frame)
+			puller.WriteAVCCAudio(puller.absTS, &frame)
 		case codec.FLV_TAG_TYPE_VIDEO:
-			puller.WriteAVCCVideo(puller.absTS, frame)
+			puller.WriteAVCCVideo(puller.absTS, &frame)
 		}
 	}
 	return

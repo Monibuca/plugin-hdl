@@ -79,7 +79,7 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 		// s := util.SizeOfBuffers(v)
 		if hdlConfig.WriteTimeout > 0 {
 			if conn, ok := sub.Writer.(net.Conn); ok {
-				conn.SetWriteDeadline(time.Now().Add(time.Second * time.Duration(hdlConfig.WriteTimeout)))
+				conn.SetWriteDeadline(time.Now().Add(hdlConfig.WriteTimeout))
 			}
 		}
 		if _, err := v.WriteTo(sub); err != nil {
@@ -147,7 +147,7 @@ func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if hijacker, ok := w.(http.Hijacker); ok && c.WriteTimeout > 0 {
 			conn, _, _ := hijacker.Hijack()
-			conn.SetWriteDeadline(time.Now().Add(time.Second * time.Duration(c.WriteTimeout)))
+			conn.SetWriteDeadline(time.Now().Add(c.WriteTimeout))
 			sub.SetIO(conn)
 		} else {
 			w.(http.Flusher).Flush()
