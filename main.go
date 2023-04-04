@@ -130,8 +130,7 @@ func (sub *HDLSubscriber) WriteFlvHeader() {
 }
 
 func (c *HDLConfig) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	streamPath := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/hdl"), ".flv")
-	streamPath = strings.TrimPrefix(streamPath, "/")
+	streamPath := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), ".flv")
 	if r.URL.RawQuery != "" {
 		streamPath += "?" + r.URL.RawQuery
 	}
