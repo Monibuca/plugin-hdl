@@ -3,6 +3,7 @@ package hdl
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -31,7 +32,16 @@ func (puller *HDLPuller) Connect() (err error) {
 	HDLPlugin.Info("connect", zap.String("remoteURL", puller.RemoteURL))
 	if strings.HasPrefix(puller.RemoteURL, "http") {
 		var res *http.Response
-		if res, err = http.Get(puller.RemoteURL); err == nil {
+		client := http.DefaultClient
+		if puller.Puller.Config.Proxy != "" {
+			proxy, err := url.Parse(puller.Puller.Config.Proxy)
+			if err != nil {
+				return err
+			}
+			transport := &http.Transport{Proxy: http.ProxyURL(proxy)}
+			client = &http.Client{Transport: transport}
+		}
+		if res, err = client.Get(puller.RemoteURL); err == nil {
 			if res.StatusCode != http.StatusOK {
 				return io.EOF
 			}
@@ -87,6 +97,9 @@ func (puller *HDLPuller) Pull() (err error) {
 			puller.WriteAVCCAudio(puller.absTS, &frame, puller.pool)
 		case codec.FLV_TAG_TYPE_VIDEO:
 			puller.WriteAVCCVideo(puller.absTS, &frame, puller.pool)
+		case codec.FLV_TAG_TYPE_SCRIPT:
+			puller.Info("script", zap.ByteString("data", mem.Value))
+			frame.Recycle()
 		}
 	}
 	return
