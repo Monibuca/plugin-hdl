@@ -1,3 +1,4 @@
+_[English](https://github.com/Monibuca/plugin-hdl/blob/v4/README.en.md) | 简体中文_
 # HDL插件
 
 HDL插件主要功能是提供HTTP-FLV协议的访问

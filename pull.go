@@ -58,6 +58,11 @@ func (puller *HDLPuller) Connect() (err error) {
 		if _, err = io.ReadFull(puller, head); err == nil {
 			if head[0] != 'F' || head[1] != 'L' || head[2] != 'V' {
 				err = codec.ErrInvalidFLV
+			} else {
+				configCopy := hdlConfig.GetPublishConfig()
+				configCopy.PubAudio = head[4]&0x04 != 0
+				configCopy.PubVideo = head[4]&0x01 != 0
+				puller.Config = &configCopy
 			}
 		}
 	}
