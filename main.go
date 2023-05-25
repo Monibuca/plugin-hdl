@@ -20,22 +20,20 @@ type HDLConfig struct {
 	config.Pull
 }
 
+func pull(streamPath, url string) {
+	if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), 0); err != nil {
+		HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
+	}
+}
 func (c *HDLConfig) OnEvent(event any) {
 	switch v := event.(type) {
 	case FirstConfig:
 		for streamPath, url := range c.PullOnStart {
-			if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), 0); err != nil {
-				HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
-			}
+			pull(streamPath, url)
 		}
 	case *Stream: //按需拉流
-		for streamPath, url := range c.PullOnSub {
-			if streamPath == v.Path {
-				if err := HDLPlugin.Pull(streamPath, url, NewHDLPuller(), 0); err != nil {
-					HDLPlugin.Error("pull", zap.String("streamPath", streamPath), zap.String("url", url), zap.Error(err))
-				}
-				break
-			}
+		if url, ok := c.PullOnSub[v.Path]; ok {
+			pull(v.Path, url)
 		}
 	}
 }
