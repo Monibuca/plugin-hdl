@@ -3,6 +3,14 @@ _[English](https://github.com/Monibuca/plugin-hdl/blob/v4/README.en.md) | 简体
 
 HDL插件主要功能是提供HTTP-FLV协议的访问
 
+HTTP-FLV协议（HDL：Http Dynamic Live）是一种动态流媒体直播协议，它是在普通的HTTP协议上实现了对FLV格式视频进行直播的功能。其名字含义主要可以拆分为三个部分：
+
+- HTTP（HyperText Transfer Protocol）：超文本传输协议，是一种用于在万维网上进行信息传输的协议。在HTTP-FLV协议中，HTTP作为基本协议，提供数据传输的基础结构。
+
+- FLV（Flash Video）：一种流媒体视频格式，起初由Adobe公司设计，主要用于在线播放短视频或直播。
+
+- HDL：Http Dynamic Live，是HTTP-FLV协议别称的缩写，可以理解为“基于HTTP的动态直播协议”，强调的是它在原有HTTP协议基础上，通过动态技术实现视频直播的功能。
+
 ## 插件地址
 
 https://github.com/Monibuca/plugin-hdl
