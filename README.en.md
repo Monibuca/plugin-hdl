@@ -45,8 +45,9 @@ ffplay http://localhost:8080/hdl/live/test.flv
 ### M7S Pull HTTP-FLV Streams from Remote
 
 The available API is:
-`/hdl/api/pull?target=[HTTP-FLV address]&streamPath=[stream identifier]&save=[whether to save configuration (leave blank if not)]`
-
+`/hdl/api/pull?target=[HTTP-FLV address]&streamPath=[stream identifier]&save=[0|1|2]`
+- save meaning: 0 - do not save 1 - save to pullonstart 2 - save to pullonsub
+- HTTP-FLV address needs to be urlencoded to prevent special characters from affecting parsing
 ### Get a List of All HDL Streams
 
 `/hdl/api/list`

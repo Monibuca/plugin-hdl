@@ -42,7 +42,9 @@ ffplay http://localhost:8080/hdl/live/test.flv
 ### m7s从远程拉取http-flv协议流
 
 可调用接口
-`/hdl/api/pull?target=[HTTP-FLV地址]&streamPath=[流标识]&save=[是否保存配置（留空则不保存）]`
+`/hdl/api/pull?target=[HTTP-FLV地址]&streamPath=[流标识]&save=[0|1|2]`
 
+- save含义： 0-不保存 1-保存到pullonstart 2-保存到pullonsub
+- HTTP-FLV地址需要进行urlencode 防止其中的特殊字符影响解析
 ### 获取所有HDL流列表
 `/hdl/api/list`
