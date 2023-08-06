@@ -81,7 +81,7 @@ func (sub *HDLSubscriber) OnEvent(event any) {
 			}
 		}
 		if _, err := v.WriteTo(sub); err != nil {
-			sub.Stop()
+			sub.Stop(zap.Error(err))
 			// } else {
 			// println(time.Since(t)/time.Millisecond, s)
 		}
