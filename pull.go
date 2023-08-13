@@ -27,7 +27,11 @@ func NewHDLPuller() *HDLPuller {
 		pool: make(util.BytesPool, 17),
 	}
 }
-
+func (puller *HDLPuller) Disconnect() {
+	if puller.Closer != nil {
+		puller.Closer.Close()
+	}
+}
 func (puller *HDLPuller) Connect() (err error) {
 	HDLPlugin.Info("connect", zap.String("remoteURL", puller.RemoteURL))
 	if strings.HasPrefix(puller.RemoteURL, "http") {

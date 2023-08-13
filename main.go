@@ -31,9 +31,9 @@ func (c *HDLConfig) OnEvent(event any) {
 		for streamPath, url := range c.PullOnStart {
 			pull(streamPath, url)
 		}
-	case *Stream: //按需拉流
-		if url, ok := c.PullOnSub[v.Path]; ok {
-			pull(v.Path, url)
+	case InvitePublish: //按需拉流
+		if url, ok := c.PullOnSub[v.Target]; ok {
+			pull(v.Target, url)
 		}
 	}
 }
@@ -59,7 +59,7 @@ func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (*HDLConfig) API_List(rw http.ResponseWriter, r *http.Request) {
-	util.ReturnJson(FilterStreams[*HDLPuller], time.Second, rw, r)
+	util.ReturnFetchValue(FilterStreams[*HDLPuller], rw, r)
 }
 
 // 确保HDLConfig实现了PullPlugin接口
