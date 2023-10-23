@@ -32,8 +32,8 @@ func (c *HDLConfig) OnEvent(event any) {
 			pull(streamPath, url)
 		}
 	case InvitePublish: //按需拉流
-		if url, ok := c.PullOnSub[v.Target]; ok {
-			pull(v.Target, url)
+	if remoteURL := c.CheckPullOnSub(v.Target); remoteURL != "" {
+			pull(v.Target, remoteURL)
 		}
 	}
 }
