@@ -52,9 +52,9 @@ func str2number(s string) int {
 func (c *HDLConfig) API_Pull(rw http.ResponseWriter, r *http.Request) {
 	err := HDLPlugin.Pull(r.URL.Query().Get("streamPath"), r.URL.Query().Get("target"), NewHDLPuller(), str2number(r.URL.Query().Get("save")))
 	if err != nil {
-		http.Error(rw, err.Error(), http.StatusBadRequest)
+		util.ReturnError(util.APIErrorPublish, err.Error(), rw, r)
 	} else {
-		rw.Write([]byte("ok"))
+		util.ReturnOK(rw, r)
 	}
 }
 
