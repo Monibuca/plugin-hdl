@@ -64,8 +64,12 @@ func (puller *HDLPuller) Connect() (err error) {
 				err = codec.ErrInvalidFLV
 			} else {
 				configCopy := hdlConfig.GetPublishConfig()
-				configCopy.PubAudio = head[4]&0x04 != 0
-				configCopy.PubVideo = head[4]&0x01 != 0
+				if head[4]&0x04 == 0 {
+					configCopy.PubAudio = false
+				}
+				if head[4]&0x01 == 0 {
+					configCopy.PubVideo = false
+				}
 				puller.Config = &configCopy
 			}
 		}
@@ -103,9 +107,13 @@ func (puller *HDLPuller) Pull() (err error) {
 		// fmt.Println(t, offsetTs, timestamp, startTs, puller.absTS)
 		switch t {
 		case codec.FLV_TAG_TYPE_AUDIO:
-			puller.WriteAVCCAudio(puller.absTS, &frame, puller.pool)
+			if puller.Config.PubAudio {
+				puller.WriteAVCCAudio(puller.absTS, &frame, puller.pool)
+			}
 		case codec.FLV_TAG_TYPE_VIDEO:
-			puller.WriteAVCCVideo(puller.absTS, &frame, puller.pool)
+			if puller.Config.PubVideo {
+				puller.WriteAVCCVideo(puller.absTS, &frame, puller.pool)
+			}
 		case codec.FLV_TAG_TYPE_SCRIPT:
 			puller.Info("script", zap.ByteString("data", mem.Value))
 			frame.Recycle()
