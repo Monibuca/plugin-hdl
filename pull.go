@@ -115,7 +115,11 @@ func (puller *HDLPuller) Pull() (err error) {
 				puller.WriteAVCCVideo(puller.absTS, &frame, puller.pool)
 			}
 		case codec.FLV_TAG_TYPE_SCRIPT:
-			puller.Info("script", zap.ByteString("data", mem.Value))
+			var amf util.AMF
+			amf.Buffer = mem.Value
+			obj, _ := amf.Unmarshal()
+			obj, err = amf.Unmarshal()
+			puller.Info("script", zap.Any("meta", obj))
 			frame.Recycle()
 		}
 	}
